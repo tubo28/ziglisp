@@ -8,9 +8,8 @@ pub fn read_line(reader: anytype) !?[]const u8 {
 
 pub fn main() !void {
     const stdin = std.io.getStdIn().reader();
-    for (0..3) |_| {
-        const l = try read_line(stdin) orelse "";
-        print("{s}\n", .{l});
+    while (try read_line(stdin)) |line| {
+        print("{s}\n", .{line});
     }
     // const stdout_file = std.io.getStdOut().writer();
     // var bw = std.io.bufferedWriter(stdout_file);
