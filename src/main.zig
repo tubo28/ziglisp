@@ -1,44 +1,24 @@
 const std = @import("std");
 const print = std.debug.print;
 
-pub fn read_line(reader: anytype) !?[]const u8 {
-    var buffer: [100]u8 = undefined;
-    return reader.readUntilDelimiterOrEof(&buffer, '\n');
+var lineBuffer: [100]u8 = undefined;
+
+fn readLine(reader: anytype) !?[]const u8 {
+    var fbs = std.io.fixedBufferStream(&lineBuffer);
+    try reader.streamUntilDelimiter(fbs.writer(), '\n', null);
+    return fbs.getWritten();
+}
+
+fn rl(reader: anytype) ?[]const u8 {
+    return readLine(reader) catch null;
 }
 
 pub fn main() !void {
     const stdin = std.io.getStdIn().reader();
-    while (try read_line(stdin)) |line| {
+    while (rl(stdin)) |line| {
         print("{s}\n", .{line});
+        std.time.sleep(1000_0000);
     }
-    // const stdout_file = std.io.getStdOut().writer();
-    // var bw = std.io.bufferedWriter(stdout_file);
-    // const stdout = bw.writer();
-
-    // const stdin = std.io.getStdIn().reader();
-    // var buf_reader = std.io.bufferedReader(stdin);
-    // var istream = buf_reader.reader();
-    // var buf: [1024]u8 = undefined;
-    // while (try istream.readUntilDelimiterOrEof(&buf, '\n')) |line| {
-    //     try stdout.print("{s}", .{line});
-    // }
-
-    // const stdin = std.io.getStdIn().reader();
-    // stdin.streamUntilDelimiter(writer: anytype, '\n')
-
-    // // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
-    // std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
-
-    // // stdout is for the actual output of your application, for example if you
-    // // are implementing gzip, then only the compressed bytes should be sent to
-    // // stdout, not any debugging messages.
-    // const stdout_file = std.io.getStdOut().writer();
-    // var bw = std.io.bufferedWriter(stdout_file);
-    // const stdout = bw.writer();
-
-    // try stdout.print("Run `zig build test` to run the tests.\n", .{});
-
-    //    try bw.flush(); // don't forget to flush!
 }
 
 // test "simple test" {
