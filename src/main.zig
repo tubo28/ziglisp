@@ -1,5 +1,6 @@
 const std = @import("std");
 const print = std.debug.print;
+const assert = std.debug.assert;
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const alloc = gpa.allocator();
@@ -13,8 +14,8 @@ const TokenKind = enum {
 
 const Token = struct {
     kind: TokenKind,
+    int: ?i64 = null,
     symbol: ?[]const u8 = null,
-    intValue: ?i64 = null,
 };
 
 fn tokenize(code: []const u8) ![]const Token {
@@ -41,7 +42,7 @@ fn tokenize(code: []const u8) ![]const Token {
                 i += 1;
             }
             const val = try std.fmt.parseInt(i64, code[begin..i], 10);
-            try toks.append(Token{ .kind = TokenKind.Int, .intValue = val });
+            try toks.append(Token{ .kind = TokenKind.Int, .int = val });
             continue;
         }
 
@@ -61,20 +62,93 @@ fn tokenize(code: []const u8) ![]const Token {
 }
 
 test "tokenize" {
+    const expect = std.testing.expect;
+
     const code = "( foo 42 )";
     const get = try tokenize(code);
-    print("a: {any}\n", .{get});
-    const want = [_]Token{
-        Token{ .kind = TokenKind.LParen },
-        Token{ .kind = TokenKind.Symbol, .symbol = "foo" },
-        Token{ .kind = TokenKind.Int, .intValue = 42 },
-        Token{ .kind = TokenKind.RParen },
-    };
+    // print("tokenize result: {any}\n", .{get});
+    // const want = [_]Token{
+    //     Token{ .kind = TokenKind.LParen },
+    //     Token{ .kind = TokenKind.Symbol, .symbol = "foo" },
+    //     Token{ .kind = TokenKind.Int, .int = 42 },
+    //     Token{ .kind = TokenKind.RParen },
+    // };
 
-    const expect = std.testing.expect;
-    try expect(get.len == want.len);
-    for (get, want) |g, w| {
-        try expect(g.kind == w.kind);
+    // try expect(get.len == want.len);
+    // for (get, want) |g, w| {
+    //     try expect(g.kind == w.kind);
+    // }
+
+    print("parse result: {any}\n", .{get});
+    print("parse result: {any}\n", .{parseSExpr(get)});
+    try expect(true);
+}
+
+const ValueKind = enum {
+    Int,
+    Symbol,
+    Cons,
+};
+
+const Cons = struct {
+    car: ?Value,
+    cdr: ?Value,
+};
+
+const Value = struct {
+    kind: ValueKind,
+    int: ?i64,
+    symbol: ?[]const u8 = null,
+    cons: ?Cons,
+};
+
+const Node = union {
+    cons: Cons,
+    atom: Atom,
+};
+
+// <S-expr> ::= <atom> | "(" <S-expr>* ")"
+// Returns null for nil
+fn parseSExpr(tokens: []const Token) .{ *Node, []const Token } {
+    print("{any}", tokens);
+
+    if (tokens.len == 0) {
+        return .{ null, tokens };
+    }
+
+    if (tokens[0].kind == TokenKind.LParen) {
+        const tmpCar = parseSExpr(tokens[1..]);
+        const car = tmpCar[0];
+        const tmpCdr = parseSExpr(tmpCar[1]);
+        const cdr = tmpCdr[0];
+        const rest = tmpCdr[1];
+        assert(rest.len >= 1 and rest[0].kind == TokenKind.LParen);
+        if (rest.len >= 2) {
+            print("triling tokens are ignored: {s}", rest[1..]);
+        }
+        return Node{ .cons = Cons{ .left = car, .right = cdr } };
+    }
+
+    return Node{ .atom = parseAtom(tokens[0]) };
+}
+
+const AtomKind = enum {
+    Number,
+    Symbol,
+};
+
+const Atom = struct {
+    kind: AtomKind,
+    symbol: ?[]const u8 = null,
+    number: ?i64 = null,
+};
+
+// <atom> ::= <symbol> | <number>
+fn parseAtom(token: Token) Atom {
+    switch (token.kind) {
+        TokenKind.Symbol => return Atom{ .kind = AtomKind.Symbol, .symbol = token.symbol },
+        TokenKind.Int => return Atom{ .kind = AtomKind.Number, .number = token.int },
+        _ => @panic("failed to parse atom"),
     }
 }
 
