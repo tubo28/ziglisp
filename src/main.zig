@@ -102,18 +102,23 @@ const Value = struct {
     cons: ?Cons,
 };
 
-const Node = union {
+const ConsCell = union {
     cons: Cons,
     atom: Atom,
 };
 
+const ParseResult = struct {
+    result: *ConsCell,
+    rest: []const Token,
+};
+
 // <S-expr> ::= <atom> | "(" <S-expr>* ")"
 // Returns null for nil
-fn parseSExpr(tokens: []const Token) .{ *Node, []const Token } {
+fn parseSExpr(tokens: []const Token) ParseResult {
     print("{any}", tokens);
 
     if (tokens.len == 0) {
-        return .{ null, tokens };
+        return ParseResult{ .result = null, .rest = tokens };
     }
 
     if (tokens[0].kind == TokenKind.LParen) {
@@ -126,10 +131,16 @@ fn parseSExpr(tokens: []const Token) .{ *Node, []const Token } {
         if (rest.len >= 2) {
             print("triling tokens are ignored: {s}", rest[1..]);
         }
-        return Node{ .cons = Cons{ .left = car, .right = cdr } };
+        return ParseResult{
+            .result = ConsCell{ .cons = Cons{ .left = car, .right = cdr } },
+            .rest = rest[1..],
+        };
     }
 
-    return Node{ .atom = parseAtom(tokens[0]) };
+    return ParseResult{
+        .result = ConsCell{ .atom = parseAtom(tokens[0]) },
+        .rest = tokens[1..],
+    };
 }
 
 const AtomKind = enum {
