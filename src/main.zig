@@ -64,6 +64,7 @@ fn tokenize(code: []const u8) ![]const Token {
 
 test "tokenize" {
     const expect = std.testing.expect;
+    _ = expect;
 
     const code = "( foo 42 )";
     const get = try tokenize(code);
@@ -83,7 +84,7 @@ test "tokenize" {
     print("parse result: {any}\n", .{get});
     const result = try parseSExpr(get);
     print("parse result: {any}\n", .{result.result});
-    try expect(true);
+    printTree(result.result);
 }
 
 // Branc of AST.
@@ -94,6 +95,13 @@ const Cons = struct {
     car: ?*ConsCell,
     cdr: ?*ConsCell,
 };
+
+fn newCons() !*Cons {
+    var cons: *Cons = try alloc.create(Cons);
+    cons.car = null;
+    cons.cdr = null;
+    return cons;
+}
 
 // Leaf of AST.
 // Token not enclosed in parens.
@@ -128,7 +136,7 @@ const ConsCell = union(ConsCellTag) {
 };
 
 const ParseResult = struct {
-    result: ?*ConsCell,
+    result: *ConsCell,
     rest: []const Token,
 };
 
@@ -140,18 +148,44 @@ fn newAtomConsCell(atom: *Atom) !*ConsCell {
 
 fn newEmptyConsCell() !*ConsCell {
     var ret: *ConsCell = try alloc.create(ConsCell);
-    ret.* = ConsCell{ .cons = try alloc.create(Cons) };
+    ret.* = ConsCell{ .cons = try newCons() };
     return ret;
+}
+
+fn printTree(cell: *ConsCell) void {
+    printTreeInner(cell, 0);
+}
+
+fn printTreeInner(cell: *ConsCell, depth: usize) void {
+    for (0..depth) |_| {
+        print(" ", .{});
+    }
+
+    switch (cell.*) {
+        ConsCell.cons => |cons| {
+            if (cons.car == null and cons.cdr == null) {
+                print("nil\n", .{});
+            } else {
+                print(".\n", .{});
+                if (cons.car) |car| printTreeInner(car, depth + 1);
+                if (cons.cdr) |cdr| printTreeInner(cdr, depth + 1);
+            }
+        },
+        ConsCell.atom => |atom| {
+            print("atom {any}\n", .{atom});
+        },
+    }
 }
 
 // <S-expr> ::= <atom> | "(" <S-expr>* ")"
 // Returns null for nil
-fn parseSExpr(tokens: []const Token) !ParseResult {
+fn parseSExpr(tokens: []const Token) anyerror!ParseResult {
     print("parser called: {any}\n", .{tokens});
 
     if (tokens.len == 0) {
         // Should panic?
-        return ParseResult{ .result = null, .rest = tokens };
+        @panic("no tokens");
+        // return ParseResult{ .result = null, .rest = tokens };
     }
 
     const head = tokens[0];
@@ -160,19 +194,19 @@ fn parseSExpr(tokens: []const Token) !ParseResult {
     switch (head) {
         Token.lParen => {
             assert(tail.len != 0);
-
-            switch (tail[0]) {
-                Token.rParen => {
-                    var ret: *ConsCell = try alloc.create(ConsCell);
-                    return ParseResult{ .result = ret, .rest = tail[1..] };
-                },
-                else => {
-                    var ret = try newEmptyConsCell();
-                    const child = try parseSExpr(tail);
-                    ret.cons.car = child.result;
-                    return ParseResult{ .result = ret, .rest = child.rest };
-                },
-            }
+            return parseList(tail);
+            // switch (tail[0]) {
+            //     Token.rParen => {
+            //         var ret: *ConsCell = try alloc.create(ConsCell);
+            //         return ParseResult{ .result = ret, .rest = tail[1..] };
+            //     },
+            //     else => {
+            //         var ret = try newEmptyConsCell();
+            //         const carResult = try parseSExpr(tail);
+            //         ret.cons.car = carResult.result;
+            //         return ParseResult{ .result = ret, .rest = carResult.rest };
+            //     },
+            // }
         },
         Token.int => |int| {
             const atom = try newAtom(i64, int);
@@ -185,6 +219,25 @@ fn parseSExpr(tokens: []const Token) !ParseResult {
             return ParseResult{ .result = cell, .rest = tokens[1..] };
         },
         Token.rParen => @panic("unbalanced parens"),
+    }
+}
+
+// <S-expr>*
+fn parseList(tokens: []const Token) anyerror!ParseResult {
+    if (tokens.len == 0) {
+        return ParseResult{ .result = try newEmptyConsCell(), .rest = tokens };
+    }
+
+    var ret = try newEmptyConsCell();
+    switch (tokens[0]) {
+        TokenTag.rParen => return ParseResult{ .result = ret, .rest = tokens },
+        else => {
+            const headResult: ParseResult = try parseSExpr(tokens);
+            ret.cons.car = headResult.result;
+            const tailResult = try parseList(headResult.rest);
+            ret.cons.cdr = tailResult.result;
+            return ParseResult{ .result = ret, .rest = tailResult.rest };
+        },
     }
 }
 
