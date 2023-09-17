@@ -5,17 +5,18 @@ const assert = std.debug.assert;
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const alloc = gpa.allocator();
 
-const TokenKind = enum {
-    Int,
-    Symbol,
-    LParen,
-    RParen,
+const TokenTag = enum {
+    int,
+    symbol,
+    lParen,
+    rParen,
 };
 
-const Token = struct {
-    kind: TokenKind,
-    int: ?i64 = null,
-    symbol: ?[]const u8 = null,
+const Token = union(TokenTag) {
+    int: i64,
+    symbol: []const u8,
+    lParen,
+    rParen,
 };
 
 fn tokenize(code: []const u8) ![]const Token {
@@ -27,12 +28,12 @@ fn tokenize(code: []const u8) ![]const Token {
         if (ascii.isWhitespace(code[i])) continue;
 
         if (code[i] == '(') {
-            try toks.append(Token{ .kind = TokenKind.LParen });
+            try toks.append(Token{ .lParen = {} });
             continue;
         }
 
         if (code[i] == ')') {
-            try toks.append(Token{ .kind = TokenKind.RParen });
+            try toks.append(Token{ .rParen = {} });
             continue;
         }
 
@@ -42,7 +43,7 @@ fn tokenize(code: []const u8) ![]const Token {
                 i += 1;
             }
             const val = try std.fmt.parseInt(i64, code[begin..i], 10);
-            try toks.append(Token{ .kind = TokenKind.Int, .int = val });
+            try toks.append(Token{ .int = val });
             continue;
         }
 
@@ -52,7 +53,7 @@ fn tokenize(code: []const u8) ![]const Token {
                 i += 1;
             }
             const sym = code[begin..i];
-            try toks.append(Token{ .kind = TokenKind.Symbol, .symbol = sym });
+            try toks.append(Token{ .symbol = sym });
             continue;
         }
 
@@ -80,85 +81,118 @@ test "tokenize" {
     // }
 
     print("parse result: {any}\n", .{get});
-    print("parse result: {any}\n", .{parseSExpr(get)});
+    const result = try parseSExpr(get);
+    print("parse result: {any}\n", .{result.result});
     try expect(true);
 }
 
-const ValueKind = enum {
-    Int,
-    Symbol,
-    Cons,
-};
-
+// Branc of AST.
+// () => Cons { .car = null, .cdr = null }
+// (foo) => Cons { .car = ConsCell { .atom = foo }, .cdr = null }
+// (foo bar) => Cons { .car = ConsCell { .atom = foo }, .cdr = ConsCell {.cons = Cons { .car = ConsCell { .atom = bar }, .cdr = null } } }
 const Cons = struct {
-    car: ?Value,
-    cdr: ?Value,
+    car: ?*ConsCell,
+    cdr: ?*ConsCell,
 };
 
-const Value = struct {
-    kind: ValueKind,
-    int: ?i64,
-    symbol: ?[]const u8 = null,
-    cons: ?Cons,
+// Leaf of AST.
+// Token not enclosed in parens.
+const AtomTag = enum {
+    number,
+    symbol,
+};
+const Atom = union(AtomTag) {
+    number: i64,
+    symbol: []const u8,
 };
 
-const ConsCell = union {
-    cons: Cons,
-    atom: Atom,
+fn newAtom(comptime T: type, value: T) !*Atom {
+    const ret: *Atom = try alloc.create(Atom);
+    switch (T) {
+        i64 => ret.* = Atom{ .number = value },
+        []const u8 => ret.* = Atom{ .symbol = value },
+        else => @panic("currently atom of only i64 or string are allowed"),
+    }
+    return ret;
+}
+
+// Node of tree.
+// Branch if cons, leaf if atom.
+const ConsCellTag = enum {
+    cons,
+    atom,
+};
+const ConsCell = union(ConsCellTag) {
+    cons: *Cons,
+    atom: *Atom,
 };
 
 const ParseResult = struct {
-    result: *ConsCell,
+    result: ?*ConsCell,
     rest: []const Token,
 };
 
+fn newAtomConsCell(atom: *Atom) !*ConsCell {
+    var ret: *ConsCell = try alloc.create(ConsCell);
+    ret.* = ConsCell{ .atom = atom };
+    return ret;
+}
+
+fn newEmptyConsCell() !*ConsCell {
+    var ret: *ConsCell = try alloc.create(ConsCell);
+    ret.* = ConsCell{ .cons = try alloc.create(Cons) };
+    return ret;
+}
+
 // <S-expr> ::= <atom> | "(" <S-expr>* ")"
 // Returns null for nil
-fn parseSExpr(tokens: []const Token) ParseResult {
-    print("{any}", tokens);
+fn parseSExpr(tokens: []const Token) !ParseResult {
+    print("parser called: {any}\n", .{tokens});
 
     if (tokens.len == 0) {
+        // Should panic?
         return ParseResult{ .result = null, .rest = tokens };
     }
 
-    if (tokens[0].kind == TokenKind.LParen) {
-        const tmpCar = parseSExpr(tokens[1..]);
-        const car = tmpCar[0];
-        const tmpCdr = parseSExpr(tmpCar[1]);
-        const cdr = tmpCdr[0];
-        const rest = tmpCdr[1];
-        assert(rest.len >= 1 and rest[0].kind == TokenKind.LParen);
-        if (rest.len >= 2) {
-            print("triling tokens are ignored: {s}", rest[1..]);
-        }
-        return ParseResult{
-            .result = ConsCell{ .cons = Cons{ .left = car, .right = cdr } },
-            .rest = rest[1..],
-        };
+    const head = tokens[0];
+    const tail = tokens[1..];
+
+    switch (head) {
+        Token.lParen => {
+            assert(tail.len != 0);
+
+            switch (tail[0]) {
+                Token.rParen => {
+                    var ret: *ConsCell = try alloc.create(ConsCell);
+                    return ParseResult{ .result = ret, .rest = tail[1..] };
+                },
+                else => {
+                    var ret = try newEmptyConsCell();
+                    const child = try parseSExpr(tail);
+                    ret.cons.car = child.result;
+                    return ParseResult{ .result = ret, .rest = child.rest };
+                },
+            }
+        },
+        Token.int => |int| {
+            const atom = try newAtom(i64, int);
+            const cell = try newAtomConsCell(atom);
+            return ParseResult{ .result = cell, .rest = tokens[1..] };
+        },
+        Token.symbol => |symbol| {
+            const atom = try newAtom([]const u8, symbol);
+            const cell = try newAtomConsCell(atom);
+            return ParseResult{ .result = cell, .rest = tokens[1..] };
+        },
+        Token.rParen => @panic("unbalanced parens"),
     }
-
-    return ParseResult{
-        .result = ConsCell{ .atom = parseAtom(tokens[0]) },
-        .rest = tokens[1..],
-    };
 }
-
-const AtomKind = enum {
-    Number,
-    Symbol,
-};
-
-const Atom = struct {
-    kind: AtomKind,
-    symbol: ?[]const u8 = null,
-    number: ?i64 = null,
-};
 
 // <atom> ::= <symbol> | <number>
 fn parseAtom(token: Token) Atom {
-    switch (token.kind) {
-        TokenKind.Symbol => return Atom{ .kind = AtomKind.Symbol, .symbol = token.symbol },
-        TokenKind.Int => return Atom{ .kind = AtomKind.Number, .number = token.int },
+    switch (token) {
+        Token.symbol => |symbol| return Atom{ .kind = AtomTag.Symbol, .symbol = symbol },
+        Token.int => |int| return Atom{ .kind = AtomTag.Number, .number = int },
         _ => @panic("failed to parse atom"),
     }
 }
