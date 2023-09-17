@@ -89,6 +89,7 @@ test "tokenize" {
 
     print("tok result: {any}\n", .{get});
     const result = try parseSExpr(get);
+    printDot(result.result);
     print("parse result: {any}\n", .{result.result});
     printTree(result.result);
 
@@ -174,7 +175,7 @@ fn newAtomConsCell(atom: *Atom) !*ConsCell {
     return ret;
 }
 
-fn newEmptyConsCell() !*ConsCell {
+fn newNilNilConsCell() !*ConsCell {
     var ret: *ConsCell = try alloc.create(ConsCell);
     ret.* = ConsCell{ .cons = try newCons(nil(), nil()) };
     return ret;
@@ -184,6 +185,33 @@ fn newConsCell(car: *ConsCell, cdr: *ConsCell) !*ConsCell {
     var ret: *ConsCell = try alloc.create(ConsCell);
     ret.* = ConsCell{ .cons = try newCons(car, cdr) };
     return ret;
+}
+
+fn printDot(cell: *ConsCell) void {
+    printDotInner(cell);
+    print("\n", .{});
+}
+
+fn printDotInner(cell: *ConsCell) void {
+    if (cell == nil()) {
+        print("nil", .{});
+        return;
+    }
+    switch (cell.*) {
+        ConsCell.cons => |cons| {
+            print("(", .{});
+            printDotInner(cons.car);
+            print(" . ", .{});
+            printDotInner(cons.cdr);
+            print(")", .{});
+        },
+        ConsCell.atom => |atom| {
+            switch (atom.*) {
+                Atom.number => |num| print("{}", .{num}),
+                Atom.symbol => |sym| print("{s}", .{sym}),
+            }
+        },
+    }
 }
 
 fn printTree(cell: *ConsCell) void {
@@ -263,14 +291,14 @@ fn parseSExpr(tokens: []const Token) anyerror!ParseResult {
 // <S-expr>*
 fn parseList(tokens: []const Token) anyerror!ParseResult {
     if (tokens.len == 0) {
-        return ParseResult{ .result = try newEmptyConsCell(), .rest = tokens };
+        return ParseResult{ .result = try newNilNilConsCell(), .rest = tokens };
     }
 
-    var ret = try newEmptyConsCell();
     switch (tokens[0]) {
-        TokenTag.rParen => return ParseResult{ .result = ret, .rest = tokens },
+        TokenTag.rParen => return ParseResult{ .result = nil(), .rest = tokens },
         else => {
             const headResult: ParseResult = try parseSExpr(tokens);
+            var ret = try newNilNilConsCell();
             ret.cons.car = headResult.result;
             const tailResult = try parseList(headResult.rest);
             ret.cons.cdr = tailResult.result;
