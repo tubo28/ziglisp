@@ -72,7 +72,7 @@ test "tokenize" {
     _ = expect;
 
     // const code = "(0 1 (2 () 3 ()) (4 ((()))))";
-    const code = "(0 1 2 () 3)";
+    const code = "(car (1 2))";
     const get = try tokenize(code);
     // print("tokenize result: {any}\n", .{get});
     // const want = [_]Token{
@@ -91,6 +91,8 @@ test "tokenize" {
     const result = try parseSExpr(get);
     print("parse result: {any}\n", .{result.result});
     printTree(result.result);
+
+    print("eval: {any}\n", .{evaluate(result.result)});
 }
 
 // Branc of AST.
@@ -98,15 +100,35 @@ test "tokenize" {
 // (foo) => Cons { .car = ConsCell { .atom = foo }, .cdr = null }
 // (foo bar) => Cons { .car = ConsCell { .atom = foo }, .cdr = ConsCell {.cons = Cons { .car = ConsCell { .atom = bar }, .cdr = null } } }
 const Cons = struct {
-    car: ?*ConsCell,
-    cdr: ?*ConsCell,
+    car: *ConsCell,
+    cdr: *ConsCell,
 };
 
-fn newCons() !*Cons {
+// fn newCons() !*Cons {
+//     var cons: *Cons = try alloc.create(Cons);
+//     cons.car = nil;
+//     cons.cdr = nil;
+//     return cons;
+// }
+
+fn newCons(car: *ConsCell, cdr: *ConsCell) !*Cons {
     var cons: *Cons = try alloc.create(Cons);
-    cons.car = null;
-    cons.cdr = null;
+    cons.* = Cons{ .car = car, .cdr = cdr };
     return cons;
+}
+
+var _nil: ?*ConsCell = null;
+
+// nil is a ConsCell such that both its car and cdr are itself.
+fn nil() *ConsCell {
+    if (_nil) |n| {
+        return n;
+    } else {
+        var n: *ConsCell = alloc.create(ConsCell) catch @panic("errro");
+        n.* = ConsCell{ .cons = newCons(n, n) catch @panic("message: []const u8") };
+        _nil = n;
+        return nil();
+    }
 }
 
 // Leaf of AST.
@@ -154,7 +176,13 @@ fn newAtomConsCell(atom: *Atom) !*ConsCell {
 
 fn newEmptyConsCell() !*ConsCell {
     var ret: *ConsCell = try alloc.create(ConsCell);
-    ret.* = ConsCell{ .cons = try newCons() };
+    ret.* = ConsCell{ .cons = try newCons(nil(), nil()) };
+    return ret;
+}
+
+fn newConsCell(car: *ConsCell, cdr: *ConsCell) !*ConsCell {
+    var ret: *ConsCell = try alloc.create(ConsCell);
+    ret.* = ConsCell{ .cons = try newCons(car, cdr) };
     return ret;
 }
 
@@ -165,14 +193,14 @@ fn printTree(cell: *ConsCell) void {
 fn printTreeInner(cell: *ConsCell, depth: usize) void {
     switch (cell.*) {
         ConsCell.cons => |cons| {
-            if (cons.car == null and cons.cdr == null) {
+            if (cons.car == nil() and cons.cdr == nil()) {
                 for (0..depth) |_| {
                     print(" ", .{});
                 }
                 print("nil\n", .{});
             } else {
-                if (cons.car) |car| printTreeInner(car, depth + 1);
-                if (cons.cdr) |cdr| printTreeInner(cdr, depth + 1);
+                if (cons.car != nil()) printTreeInner(cons.car, depth + 1);
+                if (cons.cdr != nil()) printTreeInner(cons.cdr, depth + 1);
             }
         },
         ConsCell.atom => |atom| {
@@ -258,6 +286,75 @@ fn parseAtom(token: Token) Atom {
         Token.int => |int| return Atom{ .kind = AtomTag.Number, .number = int },
         _ => @panic("failed to parse atom"),
     }
+}
+
+fn _car(cons: *ConsCell) *ConsCell {
+    switch (cons.*) {
+        ConsCell.cons => |c| return c.car,
+        ConsCell.atom => @panic("car for atom is invalid"),
+    }
+}
+
+fn _cdr(cons: *ConsCell) *ConsCell {
+    switch (cons.*) {
+        ConsCell.cons => |c| return c.cdr,
+        ConsCell.atom => @panic("cdr for atom is invalid"),
+    }
+}
+
+fn _caar(cons: *ConsCell) *ConsCell {
+    return _car(_car(cons));
+}
+
+fn _cadr(cons: *ConsCell) *ConsCell {
+    return _car(_cdr(cons));
+}
+
+fn _cadar(cons: *ConsCell) *ConsCell {
+    return _car(_cdr(_car(cons)));
+}
+
+fn _caddr(cons: *ConsCell) *ConsCell {
+    return _car(_cdr(_cdr(cons)));
+}
+
+fn _caddar(cons: *ConsCell) *ConsCell {
+    return _car(_cdr(_cdr(_car(cons))));
+}
+
+fn _atom(cons: *ConsCell) bool {
+    return switch (cons) {
+        ConsCellTag.atom => true,
+        else => false,
+    };
+}
+
+const ValueTag = enum {
+    number,
+    symbol,
+};
+
+fn evaluate(consCell: *ConsCell) *ConsCell {
+    return switch (consCell.*) {
+        ConsCell.atom => return consCell,
+        ConsCell.cons => |cons| {
+            _ = cons;
+            const car = _car(consCell);
+            switch (car.*) {
+                ConsCell.atom => |atom| switch (atom.*) {
+                    Atom.symbol => |sym| {
+                        if (std.mem.eql(u8, sym, "car")) {
+                            return _car(_cdr(consCell));
+                        } else {
+                            @panic("function except car is unimplemented");
+                        }
+                    },
+                    Atom.number => @panic("number cannot be a function"),
+                },
+                ConsCell.cons => @panic("cons cannot be a function"),
+            }
+        },
+    };
 }
 
 var lineBuffer: [100]u8 = undefined;
