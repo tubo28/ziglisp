@@ -23,17 +23,22 @@ fn tokenize(code: []const u8) ![]const Token {
     var toks = std.ArrayList(Token).init(alloc);
 
     var i: usize = 0;
-    while (i < code.len) : (i += 1) {
+    while (i < code.len) {
         const ascii = std.ascii;
-        if (ascii.isWhitespace(code[i])) continue;
+        if (ascii.isWhitespace(code[i])) {
+            i += 1;
+            continue;
+        }
 
         if (code[i] == '(') {
             try toks.append(Token{ .lParen = {} });
+            i += 1;
             continue;
         }
 
         if (code[i] == ')') {
             try toks.append(Token{ .rParen = {} });
+            i += 1;
             continue;
         }
 
@@ -66,7 +71,8 @@ test "tokenize" {
     const expect = std.testing.expect;
     _ = expect;
 
-    const code = "( foo 42 )";
+    // const code = "(0 1 (2 () 3 ()) (4 ((()))))";
+    const code = "(0 1 2 () 3)";
     const get = try tokenize(code);
     // print("tokenize result: {any}\n", .{get});
     // const want = [_]Token{
@@ -81,7 +87,7 @@ test "tokenize" {
     //     try expect(g.kind == w.kind);
     // }
 
-    print("parse result: {any}\n", .{get});
+    print("tok result: {any}\n", .{get});
     const result = try parseSExpr(get);
     print("parse result: {any}\n", .{result.result});
     printTree(result.result);
@@ -157,21 +163,22 @@ fn printTree(cell: *ConsCell) void {
 }
 
 fn printTreeInner(cell: *ConsCell, depth: usize) void {
-    for (0..depth) |_| {
-        print(" ", .{});
-    }
-
     switch (cell.*) {
         ConsCell.cons => |cons| {
             if (cons.car == null and cons.cdr == null) {
+                for (0..depth) |_| {
+                    print(" ", .{});
+                }
                 print("nil\n", .{});
             } else {
-                print(".\n", .{});
                 if (cons.car) |car| printTreeInner(car, depth + 1);
                 if (cons.cdr) |cdr| printTreeInner(cdr, depth + 1);
             }
         },
         ConsCell.atom => |atom| {
+            for (0..depth) |_| {
+                print(" ", .{});
+            }
             print("atom {any}\n", .{atom});
         },
     }
@@ -194,7 +201,10 @@ fn parseSExpr(tokens: []const Token) anyerror!ParseResult {
     switch (head) {
         Token.lParen => {
             assert(tail.len != 0);
-            return parseList(tail);
+            var ret = try parseList(tail);
+            print("{any}\n", .{ret});
+            ret.rest = ret.rest[1..]; // consume ")"
+            return ret;
             // switch (tail[0]) {
             //     Token.rParen => {
             //         var ret: *ConsCell = try alloc.create(ConsCell);
