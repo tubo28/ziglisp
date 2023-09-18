@@ -19,6 +19,10 @@ const Token = union(TokenTag) {
     rParen,
 };
 
+fn isSymbolChar(c: u8) bool {
+    return !std.ascii.isWhitespace(c) and c != ')' and c != '(';
+}
+
 fn tokenize(code: []const u8) ![]const Token {
     var toks = std.ArrayList(Token).init(alloc);
 
@@ -52,9 +56,10 @@ fn tokenize(code: []const u8) ![]const Token {
             continue;
         }
 
-        if (ascii.isAlphabetic(code[i])) {
+        // All other tokens are treated as symbol
+        {
             var begin = i;
-            while (ascii.isAlphanumeric(code[i])) {
+            while (isSymbolChar(code[i])) {
                 i += 1;
             }
             const sym = code[begin..i];
@@ -71,28 +76,12 @@ test "tokenize" {
     const expect = std.testing.expect;
     _ = expect;
 
-    // const code = "(0 1 (2 () 3 ()) (4 ((()))))";
-    const code = "(car (1 2))";
+    const code = "(+ 1 2 (+ 3 4) (+ 5 (+ 6 7)) 8 9 10)";
     const get = try tokenize(code);
-    // print("tokenize result: {any}\n", .{get});
-    // const want = [_]Token{
-    //     Token{ .kind = TokenKind.LParen },
-    //     Token{ .kind = TokenKind.Symbol, .symbol = "foo" },
-    //     Token{ .kind = TokenKind.Int, .int = 42 },
-    //     Token{ .kind = TokenKind.RParen },
-    // };
-
-    // try expect(get.len == want.len);
-    // for (get, want) |g, w| {
-    //     try expect(g.kind == w.kind);
-    // }
-
     print("tok result: {any}\n", .{get});
     const result = try parseSExpr(get);
     printDot(result.result);
     print("parse result: {any}\n", .{result.result});
-    printTree(result.result);
-
     print("eval: {any}\n", .{evaluate(result.result)});
 }
 
@@ -350,11 +339,18 @@ fn _caddar(cons: *ConsCell) *ConsCell {
     return _car(_cdr(_cdr(_car(cons))));
 }
 
-fn _atom(cons: *ConsCell) bool {
-    return switch (cons) {
-        ConsCellTag.atom => true,
-        else => false,
-    };
+fn _atomp(cons: *ConsCell) ?*Atom {
+    switch (cons.*) {
+        ConsCell.atom => |atom| return atom,
+        else => return null,
+    }
+}
+
+fn _numberp(atom: *Atom) ?i64 {
+    switch (atom.*) {
+        Atom.number => |num| return num,
+        else => return null,
+    }
 }
 
 const ValueTag = enum {
@@ -362,19 +358,45 @@ const ValueTag = enum {
     symbol,
 };
 
-fn evaluate(consCell: *ConsCell) *ConsCell {
+const EvalResultTag = enum {
+    number,
+    symbol,
+    cons,
+};
+
+const EvalResult = union(EvalResultTag) {
+    number: i64,
+    symbol: []const u8,
+    cons: *Cons,
+};
+
+fn specialize(consCell: *ConsCell) EvalResult {
+    switch (consCell.*) {
+        ConsCell.atom => |atom| switch (atom.*) {
+            Atom.symbol => |sym| return EvalResult{ .symbol = sym },
+            Atom.number => |num| return EvalResult{ .number = num },
+        },
+        ConsCell.cons => |cons| return EvalResult{ .cons = cons },
+    }
+}
+
+fn evaluate(consCell: *ConsCell) EvalResult {
     return switch (consCell.*) {
-        ConsCell.atom => return consCell,
-        ConsCell.cons => |cons| {
-            _ = cons;
+        ConsCell.atom => return specialize(consCell),
+        ConsCell.cons => {
             const car = _car(consCell);
             switch (car.*) {
                 ConsCell.atom => |atom| switch (atom.*) {
                     Atom.symbol => |sym| {
                         if (std.mem.eql(u8, sym, "car")) {
-                            return _car(_cdr(consCell));
+                            return specialize(_car(_cdr(consCell)));
+                        } else if (std.mem.eql(u8, sym, "cdr")) {
+                            return specialize(_cdr(_cdr(consCell)));
+                        } else if (std.mem.eql(u8, sym, "+")) {
+                            return EvalResult{ .number = add(_cdr(consCell)) };
                         } else {
-                            @panic("function except car is unimplemented");
+                            std.log.err("umimplemented function: {s}\n", .{sym});
+                            @panic("unimpelemented function");
                         }
                     },
                     Atom.number => @panic("number cannot be a function"),
@@ -383,6 +405,19 @@ fn evaluate(consCell: *ConsCell) *ConsCell {
             }
         },
     };
+}
+
+fn add(consCell: *ConsCell) i64 {
+    if (consCell == nil()) return 0;
+    switch (consCell.*) {
+        ConsCell.cons => {
+            print("add {}\n", .{printDot(consCell)});
+            const next = evaluate(_car(consCell));
+            const lhs = _numberp(_atomp(next)).?;
+            return lhs + add(_cdr(consCell));
+        },
+        ConsCell.atom => @panic("cannot apply add for atom"),
+    }
 }
 
 var lineBuffer: [100]u8 = undefined;
