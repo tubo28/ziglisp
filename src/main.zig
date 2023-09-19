@@ -245,32 +245,6 @@ fn toStringDotInner(cell: *const Value, builder: *std.ArrayList(u8)) !void {
     }
 }
 
-fn dumpTree(cell: *Value) void {
-    dumpTreeInner(cell, 0);
-}
-
-fn dumpTreeInner(cell: *Value, depth: usize) void {
-    switch (cell.*) {
-        Value.cons => |cons| {
-            if (cons.car == nil() and cons.cdr == nil()) {
-                for (0..depth) |_| {
-                    dump(" ", .{});
-                }
-                dump("nil\n", .{});
-            } else {
-                if (cons.car != nil()) dumpTreeInner(cons.car, depth + 1);
-                if (cons.cdr != nil()) dumpTreeInner(cons.cdr, depth + 1);
-            }
-        },
-        Value.atom => |atom| {
-            for (0..depth) |_| {
-                dump(" ", .{});
-            }
-            dump("atom {any}\n", .{atom});
-        },
-    }
-}
-
 // <sexpr>  ::= <atom>
 //            | '(' <sexpr>* ')'
 //            | <quote> <sexpr>
