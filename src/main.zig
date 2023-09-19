@@ -48,7 +48,7 @@ fn tokenize(code: []const u8) ![]const Token {
 
         if (ascii.isDigit(code[i])) {
             var begin = i;
-            while (ascii.isDigit(code[i])) {
+            while (i < code.len and ascii.isDigit(code[i])) {
                 i += 1;
             }
             const val = try std.fmt.parseInt(i64, code[begin..i], 10);
@@ -59,7 +59,7 @@ fn tokenize(code: []const u8) ![]const Token {
         // All other tokens are treated as symbol
         {
             var begin = i;
-            while (isSymbolChar(code[i])) {
+            while (i < code.len and isSymbolChar(code[i])) {
                 i += 1;
             }
             const sym = code[begin..i];
@@ -79,24 +79,24 @@ test "tokenize" {
     {
         const code = "(+ 1 2)";
         const get = try eval(code);
-        try expect(eq(get.*, Value{ .number = 3 }));
+        try expect(eq(get, try eval("3")));
     }
     {
         const code = "(+ 1 2 (+ 3 4) (+ 5 (+ 6 7)) 8 9 10)";
         const get = try eval(code);
-        try expect(eq(get.*, Value{ .number = 55 }));
+        try expect(eq(get, try eval("55")));
     }
 
     //    print("eval: {any}\n", .{get});
 }
 
-fn eq(a: Value, b: Value) bool {
-    switch (a) {
-        Value.number => |aa| switch (b) {
+fn eq(a: *const Value, b: *const Value) bool {
+    switch (a.*) {
+        Value.number => |aa| switch (b.*) {
             Value.number => |bb| return aa == bb,
             else => return false,
         },
-        Value.symbol => |aa| switch (b) {
+        Value.symbol => |aa| switch (b.*) {
             Value.symbol => |bb| return std.mem.eql(u8, aa, bb),
             else => return false,
         },
@@ -107,9 +107,9 @@ fn eq(a: Value, b: Value) bool {
 fn eval(code: []const u8) !*const Value {
     const tokens = try tokenize(code);
     const sexpr = try parseSExpr(tokens);
-    printDot(sexpr.value);
+    print("parse result: {s}\n", .{try toStringDot(sexpr.value)});
     const value = evalValue(sexpr.value);
-    printDot(value);
+    print("eval result: {s}\n", .{try toStringDot(value)});
     return value;
     //    print("eval: {any}\n", .{evalValue(ast)});
 }
@@ -180,26 +180,32 @@ fn newAtom(comptime T: type, value: T) !*Value {
     return ret;
 }
 
-fn printDot(cell: *const Value) void {
-    printDotInner(cell);
-    print("\n", .{});
+fn toStringDot(cell: *const Value) ![]const u8 {
+    var builder = std.ArrayList(u8).init(alloc);
+    defer builder.deinit();
+    try toStringDotInner(cell, &builder);
+    return builder.toOwnedSlice();
 }
 
-fn printDotInner(cell: *const Value) void {
+fn toStringDotInner(cell: *const Value, builder: *std.ArrayList(u8)) !void {
     if (cell == nil()) {
-        print("nil", .{});
+        try builder.appendSlice("nil");
         return;
     }
     switch (cell.*) {
         Value.cons => |cons| {
-            print("(", .{});
-            printDotInner(cons.car);
-            print(" . ", .{});
-            printDotInner(cons.cdr);
-            print(")", .{});
+            try builder.appendSlice("(");
+            try toStringDotInner(cons.car, builder);
+            try builder.appendSlice(" . ");
+            try toStringDotInner(cons.cdr, builder);
+            try builder.appendSlice(")");
         },
-        Value.number => |num| print("{}", .{num}),
-        Value.symbol => |sym| print("{s}", .{sym}),
+        Value.number => |num| {
+            var buffer: [20]u8 = undefined;
+            const str = try std.fmt.bufPrint(buffer[0..], "{}", .{num});
+            try builder.appendSlice(str);
+        },
+        Value.symbol => |sym| try builder.appendSlice(sym),
     }
 }
 
