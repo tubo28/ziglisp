@@ -8,15 +8,15 @@ const alloc = gpa.allocator();
 const TokenTag = enum {
     int,
     symbol,
-    lParen,
-    rParen,
+    left,
+    right,
 };
 
 const Token = union(TokenTag) {
     int: i64,
     symbol: []const u8,
-    lParen,
-    rParen,
+    left,
+    right,
 };
 
 fn isSymbolChar(c: u8) bool {
@@ -35,13 +35,13 @@ fn tokenize(code: []const u8) ![]const Token {
         }
 
         if (code[i] == '(') {
-            try toks.append(Token{ .lParen = {} });
+            try toks.append(Token{ .left = {} });
             i += 1;
             continue;
         }
 
         if (code[i] == ')') {
-            try toks.append(Token{ .rParen = {} });
+            try toks.append(Token{ .right = {} });
             i += 1;
             continue;
         }
@@ -80,9 +80,17 @@ test "tokenize" {
     const get = try tokenize(code);
     print("tok result: {any}\n", .{get});
     const result = try parseSExpr(get);
-    printDot(result.result);
-    print("parse result: {any}\n", .{result.result});
-    print("eval: {any}\n", .{evaluate(result.result)});
+    printDot(result.value);
+    print("parse result: {any}\n", .{result.value});
+    print("eval: {any}\n", .{evalValue(result.value)});
+}
+
+fn eval(code: []const u8) *const Value {
+    const tokens = try tokenize(code);
+    const result = try parseSExpr(tokens);
+    const ast = result.value;
+    printDot(ast);
+    print("eval: {any}\n", .{evalValue(ast)});
 }
 
 const Cons = struct {
@@ -125,7 +133,7 @@ const Value = union(ValueTag) {
 };
 
 const ParseResult = struct {
-    result: *Value,
+    value: *Value,
     rest: []const Token,
 };
 
@@ -201,7 +209,6 @@ fn printTreeInner(cell: *Value, depth: usize) void {
 }
 
 // <S-expr> ::= <atom> | "(" <S-expr>* ")"
-// Returns null for nil
 fn parseSExpr(tokens: []const Token) anyerror!ParseResult {
     print("parser called: {any}\n", .{tokens});
 
@@ -215,7 +222,7 @@ fn parseSExpr(tokens: []const Token) anyerror!ParseResult {
     const tail = tokens[1..];
 
     switch (head) {
-        Token.lParen => {
+        Token.left => {
             assert(tail.len != 0);
             var ret = try parseList(tail);
             print("{any}\n", .{ret});
@@ -224,31 +231,32 @@ fn parseSExpr(tokens: []const Token) anyerror!ParseResult {
         },
         Token.int => |int| {
             const atom = try newAtom(i64, int);
-            return ParseResult{ .result = atom, .rest = tokens[1..] };
+            return ParseResult{ .value = atom, .rest = tokens[1..] };
         },
         Token.symbol => |symbol| {
             const atom = try newAtom([]const u8, symbol);
-            return ParseResult{ .result = atom, .rest = tokens[1..] };
+            return ParseResult{ .value = atom, .rest = tokens[1..] };
         },
-        Token.rParen => @panic("unbalanced parens"),
+        Token.right => @panic("unbalanced parens"),
     }
 }
 
 // <S-expr>*
 fn parseList(tokens: []const Token) anyerror!ParseResult {
     if (tokens.len == 0) {
-        return ParseResult{ .result = try newNilNilConsCell(), .rest = tokens };
+        return ParseResult{ .value = try newNilNilConsCell(), .rest = tokens };
     }
 
     switch (tokens[0]) {
-        TokenTag.rParen => return ParseResult{ .result = nil(), .rest = tokens },
+        TokenTag.right => return ParseResult{ .value = nil(), .rest = tokens },
         else => {
-            const headResult: ParseResult = try parseSExpr(tokens);
-            var ret = try newNilNilConsCell();
-            ret.cons.car = headResult.result;
-            const tailResult = try parseList(headResult.rest);
-            ret.cons.cdr = tailResult.result;
-            return ParseResult{ .result = ret, .rest = tailResult.rest };
+            // Parse first S-expr
+            const car = try parseSExpr(tokens);
+            // Parse following S-exprs
+            const cdr = try parseList(car.rest);
+            // Meld the results of them
+            const ret = try newConsCell(car.value, cdr.value);
+            return ParseResult{ .value = ret, .rest = cdr.rest };
         },
     }
 }
@@ -301,7 +309,7 @@ fn _numberp(atom: *const Value) ?i64 {
     }
 }
 
-fn evaluate(x: *const Value) *const Value {
+fn evalValue(x: *const Value) *const Value {
     return switch (x.*) {
         Value.symbol, Value.number => return x,
         Value.cons => {
@@ -331,8 +339,8 @@ fn add(x: *const Value) i64 {
     switch (x.*) {
         Value.cons => {
             print("add {}\n", .{printDot(x)});
-            const next = evaluate(_car(x));
-            const lhs = _numberp(_atomp(next).?).?;
+            const lhsValue = evalValue(_car(x));
+            const lhs = _numberp(_atomp(lhsValue).?).?;
             return lhs + add(_cdr(x));
         },
         else => @panic("cannot apply add for atom"),
