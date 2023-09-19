@@ -114,6 +114,11 @@ test "tokenize" {
         const get = try eval(code);
         try expect(eq(get, try parse("hello")));
     }
+    {
+        const code = "(progn (print hello) (print world) (+ (length '(a b c)) (length '(d e))))";
+        const get = try eval(code);
+        try expect(eq(get, try parse("5")));
+    }
 }
 
 fn eq(a: *const Value, b: *const Value) bool {
@@ -360,30 +365,48 @@ fn evalValue(x: *const Value) *const Value {
             const car = _car(x);
             switch (car.*) {
                 Value.symbol => |sym| {
-                    if (std.mem.eql(u8, sym, "car")) {
+                    const eql = std.mem.eql;
+                    // Built-in functions
+                    if (eql(u8, sym, "car"))
                         return evalValue(_cdr(x));
-                    } else if (std.mem.eql(u8, sym, "cdr")) {
+                    if (eql(u8, sym, "cdr"))
                         return evalValue(_cdr(x));
-                    } else if (std.mem.eql(u8, sym, "quote")) {
-                        return _car(_cdr(x));
-                    } else if (std.mem.eql(u8, sym, "print")) {
+                    if (eql(u8, sym, "print")) {
                         const ret = print(evalValue(_car(_cdr(x))));
                         return ret;
-                    } else if (std.mem.eql(u8, sym, "+")) {
+                    }
+                    if (eql(u8, sym, "+")) {
                         const ret = add(_cdr(x));
                         return newAtom(i64, ret) catch unreachable;
-                    } else if (std.mem.eql(u8, sym, "length")) {
+                    }
+                    if (eql(u8, sym, "length")) {
                         const ret = length(evalValue(_car(_cdr(x))));
                         return newAtom(i64, ret) catch unreachable;
-                    } else {
-                        std.log.err("umimplemented function: {s}\n", .{sym});
-                        @panic("unimpelemented function");
                     }
+                    // Special forms
+                    if (eql(u8, sym, "quote"))
+                        return _car(_cdr(x));
+                    if (eql(u8, sym, "progn"))
+                        return progn(_cdr(x));
+                    std.log.err("umimplemented function: {s}\n", .{sym});
+                    unreachable;
                 },
                 Value.number => @panic("number cannot be a function"),
                 Value.cons => @panic("cons cannot be a function"),
             }
         },
+    }
+}
+
+fn progn(x: *const Value) *const Value {
+    if (x == nil()) return nil();
+    switch (x.*) {
+        Value.cons => {
+            const val = evalValue(_car(x));
+            if (_cdr(x) == nil()) return val;
+            return progn(_cdr(x));
+        },
+        else => @panic("wrong type argument"),
     }
 }
 
@@ -395,7 +418,7 @@ fn add(x: *const Value) i64 {
             const lhs = _numberp(_atomp(lhsValue).?).?;
             return lhs + add(_cdr(x));
         },
-        else => @panic("cannot apply add for atom"),
+        else => @panic("wrong type argument"),
     }
 }
 
