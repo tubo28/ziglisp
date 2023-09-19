@@ -1,5 +1,5 @@
 const std = @import("std");
-const print = std.debug.print;
+const dump = std.debug.print;
 const assert = std.debug.assert;
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -109,6 +109,11 @@ test "tokenize" {
         const get = try eval(code);
         try expect(eq(get, try parse("5")));
     }
+    {
+        const code = "(print hello)";
+        const get = try eval(code);
+        try expect(eq(get, try parse("hello")));
+    }
 }
 
 fn eq(a: *const Value, b: *const Value) bool {
@@ -132,16 +137,16 @@ fn eq(a: *const Value, b: *const Value) bool {
 fn eval(code: []const u8) !*const Value {
     const tokens = try tokenize(code);
     const sexpr = try parseSExpr(tokens);
-    print("parse result: {s}\n", .{try toStringDot(sexpr.value)});
+    dump("parse result: {s}\n", .{try toStringDot(sexpr.value)});
     const value = evalValue(sexpr.value);
-    print("eval result: {s}\n", .{try toStringDot(value)});
+    dump("eval result: {s}\n", .{try toStringDot(value)});
     return value;
 }
 
 fn parse(code: []const u8) !*const Value {
     const tokens = try tokenize(code);
     const sexpr = try parseSExpr(tokens);
-    print("parse result: {s}\n", .{try toStringDot(sexpr.value)});
+    dump("parse result: {s}\n", .{try toStringDot(sexpr.value)});
     return sexpr.value;
 }
 
@@ -240,28 +245,28 @@ fn toStringDotInner(cell: *const Value, builder: *std.ArrayList(u8)) !void {
     }
 }
 
-fn printTree(cell: *Value) void {
-    printTreeInner(cell, 0);
+fn dumpTree(cell: *Value) void {
+    dumpTreeInner(cell, 0);
 }
 
-fn printTreeInner(cell: *Value, depth: usize) void {
+fn dumpTreeInner(cell: *Value, depth: usize) void {
     switch (cell.*) {
         Value.cons => |cons| {
             if (cons.car == nil() and cons.cdr == nil()) {
                 for (0..depth) |_| {
-                    print(" ", .{});
+                    dump(" ", .{});
                 }
-                print("nil\n", .{});
+                dump("nil\n", .{});
             } else {
-                if (cons.car != nil()) printTreeInner(cons.car, depth + 1);
-                if (cons.cdr != nil()) printTreeInner(cons.cdr, depth + 1);
+                if (cons.car != nil()) dumpTreeInner(cons.car, depth + 1);
+                if (cons.cdr != nil()) dumpTreeInner(cons.cdr, depth + 1);
             }
         },
         Value.atom => |atom| {
             for (0..depth) |_| {
-                print(" ", .{});
+                dump(" ", .{});
             }
-            print("atom {any}\n", .{atom});
+            dump("atom {any}\n", .{atom});
         },
     }
 }
@@ -373,7 +378,7 @@ fn _numberp(atom: *const Value) ?i64 {
 }
 
 fn evalValue(x: *const Value) *const Value {
-    print("+ evalValue: {s}\n", .{toStringDot(x) catch unreachable});
+    dump("+ evalValue: {s}\n", .{toStringDot(x) catch unreachable});
 
     switch (x.*) {
         Value.symbol, Value.number => return x,
@@ -387,6 +392,9 @@ fn evalValue(x: *const Value) *const Value {
                         return evalValue(_cdr(x));
                     } else if (std.mem.eql(u8, sym, "quote")) {
                         return _car(_cdr(x));
+                    } else if (std.mem.eql(u8, sym, "print")) {
+                        const ret = print(evalValue(_car(_cdr(x))));
+                        return ret;
                     } else if (std.mem.eql(u8, sym, "+")) {
                         const ret = add(_cdr(x));
                         return newAtom(i64, ret) catch unreachable;
@@ -418,12 +426,18 @@ fn add(x: *const Value) i64 {
 }
 
 fn length(x: *const Value) i64 {
-    print("+ length: {s}\n", .{toStringDot(x) catch unreachable});
+    dump("+ length: {s}\n", .{toStringDot(x) catch unreachable});
     if (x == nil()) return 0;
     switch (x.*) {
         Value.cons => return 1 + length(_cdr(x)),
         else => @panic("cannot apply length for atom"),
     }
+}
+
+fn print(x: *const Value) *const Value {
+    const str = toStringDot(x) catch unreachable;
+    dump("#print: {s}\n", .{str});
+    return x;
 }
 
 var lineBuffer: [100]u8 = undefined;
@@ -441,7 +455,7 @@ fn rl(reader: anytype) ?[]const u8 {
 pub fn main() !void {
     const stdin = std.io.getStdIn().reader();
     while (rl(stdin)) |line| {
-        print("{s}\n", .{line});
+        dump("{s}\n", .{line});
         std.time.sleep(1000_0000);
     }
 }
