@@ -80,65 +80,6 @@ fn tokenize(code: []const u8) ![]const Token {
     return toks.items;
 }
 
-test "tokenize" {
-    const expect = std.testing.expect;
-
-    // TODO: parse dot notation and use it for expected value in tests
-    {
-        const code = "(+ 1 2)";
-        const get = try eval(code);
-        try expect(eq(get, try parse("3")));
-    }
-    {
-        const code = "(+ 1 2 (+ 3 4) (+ 5 (+ 6 7)) 8 9 10)";
-        const get = try eval(code);
-        try expect(eq(get, try parse("55")));
-    }
-    {
-        const code = "'(1 2 3)";
-        const get = try eval(code);
-        try expect(eq(get, try parse("(1 2 3)")));
-    }
-    {
-        const code = "(length '(1 2 3))";
-        const get = try eval(code);
-        try expect(eq(get, try parse("3")));
-    }
-    {
-        const code = "(+ (length '(a b c)) (length '(d e)))";
-        const get = try eval(code);
-        try expect(eq(get, try parse("5")));
-    }
-    {
-        const code = "(print hello)";
-        const get = try eval(code);
-        try expect(eq(get, try parse("hello")));
-    }
-    {
-        const code = "(progn (print hello) (print world) (+ (length '(a b c)) (length '(d e))))";
-        const get = try eval(code);
-        try expect(eq(get, try parse("5")));
-    }
-}
-
-fn eq(a: *const Value, b: *const Value) bool {
-    if (a == nil() or b == nil()) return a == b;
-    switch (a.*) {
-        Value.number => |aa| switch (b.*) {
-            Value.number => |bb| return aa == bb,
-            else => return false,
-        },
-        Value.symbol => |aa| switch (b.*) {
-            Value.symbol => |bb| return std.mem.eql(u8, aa, bb),
-            else => return false,
-        },
-        Value.cons => |aa| switch (b.*) {
-            Value.cons => |bb| return eq(aa.car, bb.car) and eq(aa.cdr, bb.cdr),
-            else => return false,
-        },
-    }
-}
-
 fn eval(code: []const u8) !*const Value {
     const tokens = try tokenize(code);
     const sexpr = try parseSExpr(tokens);
@@ -454,5 +395,67 @@ pub fn main() !void {
     while (rl(stdin)) |line| {
         dump("{s}\n", .{line});
         std.time.sleep(1000_0000);
+    }
+}
+
+test "tokenize" {
+    const TestCase = struct {
+        code: []const u8,
+        want: *const Value,
+    };
+
+    const cases = [_]TestCase{
+        TestCase{
+            .code = "(+ 1 2)",
+            .want = try parse("3"),
+        },
+        TestCase{
+            .code = "(+ 1 2 (+ 3 4) (+ 5 (+ 6 7)) 8 9 10)",
+            .want = try parse("55"),
+        },
+        TestCase{
+            .code = "'(1 2 3)",
+            .want = try parse("(1 2 3)"),
+        },
+        TestCase{
+            .code = "(length '(1 2 3))",
+            .want = try parse("3"),
+        },
+        TestCase{
+            .code = "(+ (length '(a b c)) (length '(d e)))",
+            .want = try parse("5"),
+        },
+        TestCase{
+            .code = "(print hello)",
+            .want = try parse("hello"),
+        },
+        TestCase{
+            .code = "(progn (print hello) (print world) (+ (length '(a b c)) (length '(d e))))",
+            .want = try parse("5"),
+        },
+    };
+
+    for (cases) |c| {
+        const code = c.code;
+        const get = try eval(code);
+        try std.testing.expect(eq(get, c.want));
+    }
+}
+
+fn eq(a: *const Value, b: *const Value) bool {
+    if (a == nil() or b == nil()) return a == b;
+    switch (a.*) {
+        Value.number => |aa| switch (b.*) {
+            Value.number => |bb| return aa == bb,
+            else => return false,
+        },
+        Value.symbol => |aa| switch (b.*) {
+            Value.symbol => |bb| return std.mem.eql(u8, aa, bb),
+            else => return false,
+        },
+        Value.cons => |aa| switch (b.*) {
+            Value.cons => |bb| return eq(aa.car, bb.car) and eq(aa.cdr, bb.cdr),
+            else => return false,
+        },
     }
 }
