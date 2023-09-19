@@ -74,23 +74,44 @@ fn tokenize(code: []const u8) ![]const Token {
 
 test "tokenize" {
     const expect = std.testing.expect;
-    _ = expect;
 
-    const code = "(+ 1 2 (+ 3 4) (+ 5 (+ 6 7)) 8 9 10)";
-    const get = try tokenize(code);
-    print("tok result: {any}\n", .{get});
-    const result = try parseSExpr(get);
-    printDot(result.value);
-    print("parse result: {any}\n", .{result.value});
-    print("eval: {any}\n", .{evalValue(result.value)});
+    // TODO: parse dot notation and use it for expected value in tests
+    {
+        const code = "(+ 1 2)";
+        const get = try eval(code);
+        try expect(eq(get.*, Value{ .number = 3 }));
+    }
+    {
+        const code = "(+ 1 2 (+ 3 4) (+ 5 (+ 6 7)) 8 9 10)";
+        const get = try eval(code);
+        try expect(eq(get.*, Value{ .number = 55 }));
+    }
+
+    //    print("eval: {any}\n", .{get});
 }
 
-fn eval(code: []const u8) *const Value {
+fn eq(a: Value, b: Value) bool {
+    switch (a) {
+        Value.number => |aa| switch (b) {
+            Value.number => |bb| return aa == bb,
+            else => return false,
+        },
+        Value.symbol => |aa| switch (b) {
+            Value.symbol => |bb| return std.mem.eql(u8, aa, bb),
+            else => return false,
+        },
+        Value.cons => @panic("unimplemented"),
+    }
+}
+
+fn eval(code: []const u8) !*const Value {
     const tokens = try tokenize(code);
-    const result = try parseSExpr(tokens);
-    const ast = result.value;
-    printDot(ast);
-    print("eval: {any}\n", .{evalValue(ast)});
+    const sexpr = try parseSExpr(tokens);
+    printDot(sexpr.value);
+    const value = evalValue(sexpr.value);
+    printDot(value);
+    return value;
+    //    print("eval: {any}\n", .{evalValue(ast)});
 }
 
 const Cons = struct {
@@ -210,8 +231,6 @@ fn printTreeInner(cell: *Value, depth: usize) void {
 
 // <S-expr> ::= <atom> | "(" <S-expr>* ")"
 fn parseSExpr(tokens: []const Token) anyerror!ParseResult {
-    print("parser called: {any}\n", .{tokens});
-
     if (tokens.len == 0) {
         // Should panic?
         @panic("no tokens");
@@ -225,7 +244,6 @@ fn parseSExpr(tokens: []const Token) anyerror!ParseResult {
         Token.left => {
             assert(tail.len != 0);
             var ret = try parseList(tail);
-            print("{any}\n", .{ret});
             ret.rest = ret.rest[1..]; // consume ")"
             return ret;
         },
@@ -338,7 +356,6 @@ fn add(x: *const Value) i64 {
     if (x == nil()) return 0;
     switch (x.*) {
         Value.cons => {
-            print("add {}\n", .{printDot(x)});
             const lhsValue = evalValue(_car(x));
             const lhs = _numberp(_atomp(lhsValue).?).?;
             return lhs + add(_cdr(x));
