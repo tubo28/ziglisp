@@ -84,7 +84,8 @@ fn eval(code: []const u8) !*const Value {
     const tokens = try tokenize(code);
     const sexpr = try parseSExpr(tokens);
     dump("parse result: {s}\n", .{try toStringDot(sexpr.value)});
-    const value = evalValue(sexpr.value);
+    var env = Map.init(alloc);
+    const value = evalValue(sexpr.value, &env);
     dump("eval result: {s}\n", .{try toStringDot(value)});
     return value;
 }
@@ -297,11 +298,24 @@ fn _numberp(atom: *const Value) ?i64 {
     }
 }
 
-fn evalValue(x: *const Value) *const Value {
+fn _symbolp(atom: *const Value) ?[]const u8 {
+    switch (atom.*) {
+        Value.symbol => |sym| return sym,
+        else => return null,
+    }
+}
+
+const Map = std.StringHashMap(*const Value);
+
+fn evalValue(x: *const Value, env: *Map) *const Value {
     dump("+ evalValue: {s}\n", .{toStringDot(x) catch unreachable});
 
     switch (x.*) {
-        Value.symbol, Value.number => return x,
+        Value.number => return x,
+        Value.symbol => |sym| {
+            if (env.get(sym)) |ent| return ent;
+            return x;
+        },
         Value.cons => {
             const car = _car(x);
             switch (car.*) {
@@ -309,26 +323,31 @@ fn evalValue(x: *const Value) *const Value {
                     const eql = std.mem.eql;
                     // Built-in functions
                     if (eql(u8, sym, "car"))
-                        return evalValue(_cdr(x));
+                        return evalValue(_cdr(x), env);
                     if (eql(u8, sym, "cdr"))
-                        return evalValue(_cdr(x));
+                        return evalValue(_cdr(x), env);
                     if (eql(u8, sym, "print")) {
-                        const ret = print(evalValue(_car(_cdr(x))));
+                        const val = evalValue(_car(_cdr(x)), env);
+                        const ret = print(val);
                         return ret;
                     }
                     if (eql(u8, sym, "+")) {
-                        const ret = add(_cdr(x));
+                        const ret = add(_cdr(x), env);
                         return newAtom(i64, ret) catch unreachable;
                     }
                     if (eql(u8, sym, "length")) {
-                        const ret = length(evalValue(_car(_cdr(x))));
+                        const arg = evalValue(_car(_cdr(x)), env);
+                        const ret = length(arg);
                         return newAtom(i64, ret) catch unreachable;
                     }
                     // Special forms
                     if (eql(u8, sym, "quote"))
                         return _car(_cdr(x));
                     if (eql(u8, sym, "progn"))
-                        return progn(_cdr(x));
+                        return progn(_cdr(x), env);
+                    if (eql(u8, sym, "setq"))
+                        return setq(_cdr(x), env);
+
                     std.log.err("umimplemented function: {s}\n", .{sym});
                     unreachable;
                 },
@@ -339,25 +358,33 @@ fn evalValue(x: *const Value) *const Value {
     }
 }
 
-fn progn(x: *const Value) *const Value {
+fn setq(x: *const Value, env: *Map) *const Value {
+    if (x == nil()) return nil();
+    const sym = _symbolp(_car(x)).?;
+    const val = evalValue(_car(_cdr(x)), env);
+    env.put(sym, val) catch unreachable;
+    return val;
+}
+
+fn progn(x: *const Value, env: *Map) *const Value {
     if (x == nil()) return nil();
     switch (x.*) {
         Value.cons => {
-            const val = evalValue(_car(x));
+            const val = evalValue(_car(x), env);
             if (_cdr(x) == nil()) return val;
-            return progn(_cdr(x));
+            return progn(_cdr(x), env);
         },
         else => @panic("wrong type argument"),
     }
 }
 
-fn add(x: *const Value) i64 {
+fn add(x: *const Value, env: *Map) i64 {
     if (x == nil()) return 0;
     switch (x.*) {
         Value.cons => {
-            const lhsValue = evalValue(_car(x));
+            const lhsValue = evalValue(_car(x), env);
             const lhs = _numberp(_atomp(lhsValue).?).?;
-            return lhs + add(_cdr(x));
+            return lhs + add(_cdr(x), env);
         },
         else => @panic("wrong type argument"),
     }
@@ -431,6 +458,18 @@ test "tokenize" {
         },
         TestCase{
             .code = "(progn (print hello) (print world) (+ (length '(a b c)) (length '(d e))))",
+            .want = try parse("5"),
+        },
+        TestCase{
+            .code = "(setq menu '(tea coffee milk))",
+            .want = try parse("(tea coffee milk)"),
+        },
+        TestCase{
+            .code = "(progn (setq a 1) (setq b 2) (+ a b 3))",
+            .want = try parse("6"),
+        },
+        TestCase{
+            .code = "(progn (setq p '(3 1 4 1 5)) (print (length p)))",
             .want = try parse("5"),
         },
     };
