@@ -10,6 +10,7 @@ const TokenTag = enum {
     symbol,
     left,
     right,
+    quote,
 };
 
 const Token = union(TokenTag) {
@@ -17,10 +18,11 @@ const Token = union(TokenTag) {
     symbol: []const u8,
     left,
     right,
+    quote,
 };
 
 fn isSymbolChar(c: u8) bool {
-    return !std.ascii.isWhitespace(c) and c != ')' and c != '(';
+    return !std.ascii.isWhitespace(c) and c != ')' and c != '(' and c != '\'';
 }
 
 fn tokenize(code: []const u8) ![]const Token {
@@ -42,6 +44,12 @@ fn tokenize(code: []const u8) ![]const Token {
 
         if (code[i] == ')') {
             try toks.append(Token{ .right = {} });
+            i += 1;
+            continue;
+        }
+
+        if (code[i] == '\'') {
+            try toks.append(Token{ .quote = {} });
             i += 1;
             continue;
         }
@@ -79,18 +87,32 @@ test "tokenize" {
     {
         const code = "(+ 1 2)";
         const get = try eval(code);
-        try expect(eq(get, try eval("3")));
+        try expect(eq(get, try parse("3")));
     }
     {
         const code = "(+ 1 2 (+ 3 4) (+ 5 (+ 6 7)) 8 9 10)";
         const get = try eval(code);
-        try expect(eq(get, try eval("55")));
+        try expect(eq(get, try parse("55")));
     }
-
-    //    print("eval: {any}\n", .{get});
+    {
+        const code = "'(1 2 3)";
+        const get = try eval(code);
+        try expect(eq(get, try parse("(1 2 3)")));
+    }
+    {
+        const code = "(length '(1 2 3))";
+        const get = try eval(code);
+        try expect(eq(get, try parse("3")));
+    }
+    {
+        const code = "(+ (length '(a b c)) (length '(d e)))";
+        const get = try eval(code);
+        try expect(eq(get, try parse("5")));
+    }
 }
 
 fn eq(a: *const Value, b: *const Value) bool {
+    if (a == nil() or b == nil()) return a == b;
     switch (a.*) {
         Value.number => |aa| switch (b.*) {
             Value.number => |bb| return aa == bb,
@@ -100,7 +122,10 @@ fn eq(a: *const Value, b: *const Value) bool {
             Value.symbol => |bb| return std.mem.eql(u8, aa, bb),
             else => return false,
         },
-        Value.cons => @panic("unimplemented"),
+        Value.cons => |aa| switch (b.*) {
+            Value.cons => |bb| return eq(aa.car, bb.car) and eq(aa.cdr, bb.cdr),
+            else => return false,
+        },
     }
 }
 
@@ -111,7 +136,13 @@ fn eval(code: []const u8) !*const Value {
     const value = evalValue(sexpr.value);
     print("eval result: {s}\n", .{try toStringDot(value)});
     return value;
-    //    print("eval: {any}\n", .{evalValue(ast)});
+}
+
+fn parse(code: []const u8) !*const Value {
+    const tokens = try tokenize(code);
+    const sexpr = try parseSExpr(tokens);
+    print("parse result: {s}\n", .{try toStringDot(sexpr.value)});
+    return sexpr.value;
 }
 
 const Cons = struct {
@@ -235,7 +266,9 @@ fn printTreeInner(cell: *Value, depth: usize) void {
     }
 }
 
-// <S-expr> ::= <atom> | "(" <S-expr>* ")"
+// <sexpr>  ::= <atom>
+//            | '(' <sexpr>* ')'
+//            | <quote> <sexpr>
 fn parseSExpr(tokens: []const Token) anyerror!ParseResult {
     if (tokens.len == 0) {
         // Should panic?
@@ -252,6 +285,12 @@ fn parseSExpr(tokens: []const Token) anyerror!ParseResult {
             var ret = try parseList(tail);
             ret.rest = ret.rest[1..]; // consume ")"
             return ret;
+        },
+        Token.quote => {
+            // <quote> <sexpr> => (quote <sexpr>)
+            var listResult = try parseSExpr(tail);
+            const quote = try newAtom([]const u8, "quote");
+            return ParseResult{ .value = try newConsCell(quote, try newConsCell(listResult.value, nil())), .rest = listResult.rest };
         },
         Token.int => |int| {
             const atom = try newAtom(i64, int);
@@ -334,18 +373,26 @@ fn _numberp(atom: *const Value) ?i64 {
 }
 
 fn evalValue(x: *const Value) *const Value {
-    return switch (x.*) {
+    print("+ evalValue: {s}\n", .{toStringDot(x) catch unreachable});
+
+    switch (x.*) {
         Value.symbol, Value.number => return x,
         Value.cons => {
             const car = _car(x);
             switch (car.*) {
                 Value.symbol => |sym| {
                     if (std.mem.eql(u8, sym, "car")) {
-                        return _car(_cdr(x));
+                        return evalValue(_cdr(x));
                     } else if (std.mem.eql(u8, sym, "cdr")) {
-                        return _cdr(_cdr(x));
+                        return evalValue(_cdr(x));
+                    } else if (std.mem.eql(u8, sym, "quote")) {
+                        return _car(_cdr(x));
                     } else if (std.mem.eql(u8, sym, "+")) {
-                        return newAtom(i64, add(_cdr(x))) catch @panic("failed to create new atom");
+                        const ret = add(_cdr(x));
+                        return newAtom(i64, ret) catch unreachable;
+                    } else if (std.mem.eql(u8, sym, "length")) {
+                        const ret = length(evalValue(_car(_cdr(x))));
+                        return newAtom(i64, ret) catch unreachable;
                     } else {
                         std.log.err("umimplemented function: {s}\n", .{sym});
                         @panic("unimpelemented function");
@@ -355,7 +402,7 @@ fn evalValue(x: *const Value) *const Value {
                 Value.cons => @panic("cons cannot be a function"),
             }
         },
-    };
+    }
 }
 
 fn add(x: *const Value) i64 {
@@ -367,6 +414,15 @@ fn add(x: *const Value) i64 {
             return lhs + add(_cdr(x));
         },
         else => @panic("cannot apply add for atom"),
+    }
+}
+
+fn length(x: *const Value) i64 {
+    print("+ length: {s}\n", .{toStringDot(x) catch unreachable});
+    if (x == nil()) return 0;
+    switch (x.*) {
+        Value.cons => return 1 + length(_cdr(x)),
+        else => @panic("cannot apply length for atom"),
     }
 }
 
