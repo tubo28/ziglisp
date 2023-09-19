@@ -11,14 +11,16 @@ const TokenTag = enum {
     left,
     right,
     quote,
+    nil,
 };
 
 const Token = union(TokenTag) {
     int: i64,
     symbol: []const u8,
-    left,
-    right,
-    quote,
+    left, // (
+    right, // )
+    quote, // '
+    nil, // nil
 };
 
 fn isSymbolChar(c: u8) bool {
@@ -64,13 +66,18 @@ fn tokenize(code: []const u8) ![]const Token {
             continue;
         }
 
-        // All other tokens are treated as symbol
+        // All other chars are parts of as symbol
         {
             var begin = i;
             while (i < code.len and isSymbolChar(code[i])) {
                 i += 1;
             }
             const sym = code[begin..i];
+            // special symbol
+            if (std.mem.eql(u8, sym, "nil")) {
+                try toks.append(Token{ .nil = {} });
+                continue;
+            }
             try toks.append(Token{ .symbol = sym });
             continue;
         }
@@ -98,11 +105,11 @@ fn parse(code: []const u8) !*const Value {
 }
 
 const Cons = struct {
-    car: *Value,
-    cdr: *Value,
+    car: *const Value,
+    cdr: *const Value,
 };
 
-fn newCons(car: *Value, cdr: *Value) !*Cons {
+fn newCons(car: *const Value, cdr: *const Value) !*Cons {
     var cons: *Cons = try alloc.create(Cons);
     cons.* = Cons{ .car = car, .cdr = cdr };
     return cons;
@@ -147,7 +154,7 @@ fn newNilNilConsCell() !*Value {
     return ret;
 }
 
-fn newConsCell(car: *Value, cdr: *Value) !*Value {
+fn newConsCell(car: *const Value, cdr: *const Value) !*Value {
     var ret: *Value = try alloc.create(Value);
     ret.* = Value{ .cons = try newCons(car, cdr) };
     return ret;
@@ -227,6 +234,7 @@ fn parseSExpr(tokens: []const Token) anyerror!ParseResult {
             return ParseResult{ .value = atom, .rest = tokens[1..] };
         },
         Token.right => @panic("unbalanced parens"),
+        Token.nil => unreachable,
     }
 }
 
@@ -322,14 +330,23 @@ fn evalValue(x: *const Value, env: *Map) *const Value {
                 Value.symbol => |sym| {
                     const eql = std.mem.eql;
                     // Built-in functions
-                    if (eql(u8, sym, "car"))
-                        return evalValue(_cdr(x), env);
-                    if (eql(u8, sym, "cdr"))
-                        return evalValue(_cdr(x), env);
+                    if (eql(u8, sym, "car")) {
+                        const arg = evalValue(_car(_cdr(x)), env);
+                        return _car(arg);
+                    }
+                    if (eql(u8, sym, "cdr")) {
+                        const arg = evalValue(_car(_cdr(x)), env);
+                        return _cdr(arg);
+                    }
+                    if (eql(u8, sym, "cons")) {
+                        const tmp = _car(_cdr(x));
+                        const argCar = evalValue(_car(tmp), env);
+                        const argCdr = evalValue(_cdr(tmp), env);
+                        return newConsCell(argCar, argCdr) catch unreachable;
+                    }
                     if (eql(u8, sym, "print")) {
-                        const val = evalValue(_car(_cdr(x)), env);
-                        const ret = print(val);
-                        return ret;
+                        const arg = evalValue(_car(_cdr(x)), env);
+                        return print(arg);
                     }
                     if (eql(u8, sym, "+")) {
                         const ret = add(_cdr(x), env);
@@ -471,6 +488,30 @@ test "tokenize" {
         TestCase{
             .code = "(progn (setq p '(3 1 4 1 5)) (print (length p)))",
             .want = try parse("5"),
+        },
+        TestCase{
+            .code = "(car '(a b c))",
+            .want = try parse("a"),
+        },
+        TestCase{
+            .code = "(car '((a b) (c d)))",
+            .want = try parse("(a b)"),
+        },
+        TestCase{
+            .code = "(progn (setq menu '(tea coffee milk)) (car menu))",
+            .want = try parse("tea"),
+        },
+        TestCase{
+            .code = "(progn (setq menu '(tea coffee milk)) (cdr menu))",
+            .want = try parse("(coffee milk)"),
+        },
+        TestCase{
+            .code = "(progn (setq menu '(tea coffee milk)) (cdr (cdr menu)))",
+            .want = try parse("(milk)"),
+        },
+        TestCase{
+            .code = "(progn (setq menu '(tea coffee milk)) (cdr (cdr (cdr menu))))",
+            .want = try parse("nil"),
         },
     };
 
