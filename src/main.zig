@@ -234,7 +234,7 @@ fn parseSExpr(tokens: []const Token) anyerror!ParseResult {
             return ParseResult{ .value = atom, .rest = tokens[1..] };
         },
         Token.right => @panic("unbalanced parens"),
-        Token.nil => unreachable,
+        Token.nil => return ParseResult{ .value = nil(), .rest = tokens[1..] },
     }
 }
 
@@ -272,26 +272,6 @@ fn _cdr(cons: *const Value) *const Value {
     }
 }
 
-fn _caar(cons: *const Value) *const Value {
-    return _car(_car(cons));
-}
-
-fn _cadr(cons: *const Value) *const Value {
-    return _car(_cdr(cons));
-}
-
-fn _cadar(cons: *const Value) *const Value {
-    return _car(_cdr(_car(cons)));
-}
-
-fn _caddr(cons: *const Value) *const Value {
-    return _car(_cdr(_cdr(cons)));
-}
-
-fn _caddar(cons: *const Value) *const Value {
-    return _car(_cdr(_cdr(_car(cons))));
-}
-
 fn _atomp(cons: *const Value) ?*const Value {
     switch (cons.*) {
         Value.cons => return null,
@@ -316,8 +296,7 @@ fn _symbolp(atom: *const Value) ?[]const u8 {
 const Map = std.StringHashMap(*const Value);
 
 fn evalValue(x: *const Value, env: *Map) *const Value {
-    dump("+ evalValue: {s}\n", .{toStringDot(x) catch unreachable});
-
+    // dump("+ evalValue: {s}\n", .{toStringDot(x) catch unreachable});
     switch (x.*) {
         Value.number => return x,
         Value.symbol => |sym| {
@@ -339,9 +318,8 @@ fn evalValue(x: *const Value, env: *Map) *const Value {
                         return _cdr(arg);
                     }
                     if (eql(u8, sym, "cons")) {
-                        const tmp = _car(_cdr(x));
-                        const argCar = evalValue(_car(tmp), env);
-                        const argCdr = evalValue(_cdr(tmp), env);
+                        const argCar = evalValue(_car(_cdr(x)), env);
+                        const argCdr = evalValue(_car(_cdr(_cdr(x))), env);
                         return newConsCell(argCar, argCdr) catch unreachable;
                     }
                     if (eql(u8, sym, "print")) {
@@ -369,7 +347,7 @@ fn evalValue(x: *const Value, env: *Map) *const Value {
                     unreachable;
                 },
                 Value.number => @panic("number cannot be a function"),
-                Value.cons => @panic("cons cannot be a function"),
+                Value.cons => @panic("cons cell cannot be a function"),
             }
         },
     }
@@ -512,6 +490,42 @@ test "tokenize" {
         TestCase{
             .code = "(progn (setq menu '(tea coffee milk)) (cdr (cdr (cdr menu))))",
             .want = try parse("nil"),
+        },
+        TestCase{
+            .code = "(progn (setq menu '(tea coffee milk)) (car (cdr menu)))",
+            .want = try parse("coffee"),
+        },
+        TestCase{
+            .code = "(cons '(a b) '(c d))",
+            .want = try parse("((a b) c d)"),
+        },
+        TestCase{
+            .code = "(progn (setq menu '(tea coffee milk)) (cons 'cocoa menu))",
+            .want = try parse("(cocoa tea coffee milk)"),
+        },
+        TestCase{
+            .code = "(progn (setq menu '(tea coffee milk)) (cons 'cocoa (cdr menu)))",
+            .want = try parse("(cocoa coffee milk)"),
+        },
+        TestCase{
+            .code = "(progn (setq menu '(tea coffee milk)) (car (cdr (cdr menu))))",
+            .want = try parse("milk"),
+        },
+        TestCase{
+            .code = "(progn (setq menu '(tea coffee milk)) (cons 'juice (cdr menu))))",
+            .want = try parse("(juice coffee milk)"),
+        },
+        TestCase{
+            .code = "(progn (setq menu '(tea coffee milk)) (cons (car menu) (cons 'juice (cdr menu))))",
+            .want = try parse("(tea juice coffee milk)"),
+        },
+        TestCase{
+            .code = "(progn (setq menu '(tea coffee milk)) (cons (car menu) (cdr (cdr menu))))",
+            .want = try parse("(tea milk)"),
+        },
+        TestCase{
+            .code = "(progn (setq menu '(tea coffee milk)) (cons (car (cdr menu)) (cons (car menu) (cdr (cdr menu)))))",
+            .want = try parse("(coffee tea milk)"),
         },
     };
 
