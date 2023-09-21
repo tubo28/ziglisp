@@ -5,6 +5,7 @@ const alloc = common.alloc;
 const Function = common.Function;
 const Map = common.Map;
 const nil = common.nil;
+const t = common.t;
 const tos = common.toStringDot;
 const Value = common.Value;
 
@@ -119,9 +120,9 @@ fn toEvaledSlice(head: *const Value, env: *Map) []*const Value {
 }
 
 // special form
-fn _if(cond: *const Value, t: *const Value, f: ?*const Value, env: *Map) *const Value {
-    if (toBool(evaluate(cond, env))) return evaluate(t, env);
-    if (f) |ff| return evaluate(ff, env);
+fn _if(cond: *const Value, then: *const Value, unless: ?*const Value, env: *Map) *const Value {
+    if (toBool(evaluate(cond, env))) return evaluate(then, env);
+    if (unless) |f| return evaluate(f, env);
     return nil();
 }
 
@@ -219,7 +220,7 @@ fn _symbolp(atom: *const Value) ?[]const u8 {
 fn _add(xs: []*const Value) *const Value {
     var ret: i64 = 0;
     for (xs) |x| ret += _numberp(x).?;
-    return common.newAtomValue(i64, ret);
+    return common.newNumberValue(ret);
 }
 
 // built-in func
@@ -228,24 +229,24 @@ fn _sub(xs: []*const Value) *const Value {
     for (xs, 0..) |x, i| {
         if (i == 0) ret += _numberp(x).? else ret -= _numberp(x).?;
     }
-    return common.newAtomValue(i64, ret);
+    return common.newNumberValue(ret);
 }
 
 // built-in func
 fn _or(xs: []*const Value) *const Value {
-    for (xs) |x| if (toBool(x)) return common.newAtomValue([]const u8, "t");
+    for (xs) |x| if (toBool(x)) return t();
     return nil();
 }
 
 // built-in func
 fn _and(xs: []*const Value) *const Value {
     for (xs) |x| if (!toBool(x)) return nil();
-    return common.newAtomValue([]const u8, "t");
+    return t();
 }
 
 // built-in func
 fn _eq(x: *const Value, y: *const Value) *const Value {
-    if (boolEq(x, y)) return common.newAtomValue([]const u8, "t");
+    if (boolEq(x, y)) return t();
     return nil();
 }
 
@@ -274,7 +275,7 @@ pub fn boolEq(x: *const Value, y: *const Value) bool {
 // built-in func
 fn _length(x: *const Value) *const Value {
     const slice = toSlice(x);
-    return common.newAtomValue(i64, @intCast(slice.len));
+    return common.newNumberValue(@intCast(slice.len));
 }
 
 // built-in func

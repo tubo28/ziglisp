@@ -37,8 +37,15 @@ pub fn newConsValue(car: *const Value, cdr: *const Value) *Value {
     return ret;
 }
 
-// TODO: split into new symbol and newNumber
-pub fn newAtomValue(comptime T: type, value: T) *Value {
+pub fn newNumberValue(x: i64) *Value {
+    return newAtomValue(i64, x);
+}
+
+pub fn newSymbolValue(x: []const u8) *Value {
+    return newAtomValue([]const u8, x);
+}
+
+fn newAtomValue(comptime T: type, value: T) *Value {
     var ret: *Value = alloc.create(Value) catch unreachable;
     switch (T) {
         i64 => ret.* = Value{ .number = value },
@@ -73,6 +80,7 @@ pub fn newFunc(name: []const u8, params: [][]const u8, body: *const Value, env: 
 }
 
 var _nil: ?*Value = null;
+var _t: ?*Value = null;
 
 /// nil is a ConsCell such that both its car and cdr are itself.
 pub fn nil() *const Value {
@@ -81,7 +89,13 @@ pub fn nil() *const Value {
     var n: *Value = alloc.create(Value) catch @panic("errro");
     n.* = Value{ .cons = newCons(n, n) };
     _nil = n;
-    return nil();
+    return _nil.?;
+}
+
+pub fn t() *const Value {
+    if (_t) |tt| return tt;
+    _t = newSymbolValue("t");
+    return _t.?;
 }
 
 pub fn toStringDot(cell: *const Value) []const u8 {

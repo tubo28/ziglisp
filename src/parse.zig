@@ -35,18 +35,18 @@ pub fn parse(tokens: []const Token) ParseResult {
         Token.quote => {
             // <quote> <sexpr> => (quote <sexpr>)
             const listResult = parse(tail);
-            const quote = common.newAtomValue([]const u8, "quote");
+            const quote = common.newSymbolValue("quote");
             return ParseResult{
                 .value = common.newConsValue(quote, common.newConsValue(listResult.value, nil())),
                 .rest = listResult.rest,
             };
         },
         Token.int => |int| {
-            const atom = common.newAtomValue(i64, int);
+            const atom = common.newNumberValue(int);
             return ParseResult{ .value = atom, .rest = tokens[1..] };
         },
         Token.symbol => |symbol| {
-            const atom = common.newAtomValue([]const u8, symbol);
+            const atom = common.newSymbolValue(symbol);
             return ParseResult{ .value = atom, .rest = tokens[1..] };
         },
         Token.right => @panic("unbalanced parens"),
