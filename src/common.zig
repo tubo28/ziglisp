@@ -37,6 +37,7 @@ pub fn newConsValue(car: *const Value, cdr: *const Value) *Value {
     return ret;
 }
 
+// TODO: split into new symbol and newNumber
 pub fn newAtomValue(comptime T: type, value: T) *Value {
     var ret: *Value = alloc.create(Value) catch unreachable;
     switch (T) {

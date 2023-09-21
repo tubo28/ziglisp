@@ -65,6 +65,14 @@ pub fn evaluate(x: *const Value, env: *Map) *const Value {
                             return _print(args[0]);
                         if (eql(u8, sym, "+"))
                             return _add(args);
+                        if (eql(u8, sym, "-"))
+                            return _sub(args);
+                        if (eql(u8, sym, "eq"))
+                            return _eq(args[0], args[1]);
+                        if (eql(u8, sym, "or"))
+                            return _or(args);
+                        if (eql(u8, sym, "and"))
+                            return _and(args);
                         if (eql(u8, sym, "length"))
                             return _length(args[0]);
                     }
@@ -112,9 +120,13 @@ fn toEvaledSlice(head: *const Value, env: *Map) []*const Value {
 
 // special form
 fn _if(cond: *const Value, t: *const Value, f: ?*const Value, env: *Map) *const Value {
-    if (!isNil(evaluate(cond, env))) return evaluate(t, env);
+    if (toBool(evaluate(cond, env))) return evaluate(t, env);
     if (f) |ff| return evaluate(ff, env);
     return nil();
+}
+
+fn toBool(x: *const Value) bool {
+    return !isNil(x);
 }
 
 fn isNil(x: *const Value) bool {
@@ -208,6 +220,55 @@ fn _add(xs: []*const Value) *const Value {
     var ret: i64 = 0;
     for (xs) |x| ret += _numberp(x).?;
     return common.newAtomValue(i64, ret);
+}
+
+// built-in func
+fn _sub(xs: []*const Value) *const Value {
+    var ret: i64 = 0;
+    for (xs, 0..) |x, i| {
+        if (i == 0) ret += _numberp(x).? else ret -= _numberp(x).?;
+    }
+    return common.newAtomValue(i64, ret);
+}
+
+// built-in func
+fn _or(xs: []*const Value) *const Value {
+    for (xs) |x| if (toBool(x)) return common.newAtomValue([]const u8, "t");
+    return nil();
+}
+
+// built-in func
+fn _and(xs: []*const Value) *const Value {
+    for (xs) |x| if (!toBool(x)) return nil();
+    return common.newAtomValue([]const u8, "t");
+}
+
+// built-in func
+fn _eq(x: *const Value, y: *const Value) *const Value {
+    if (boolEq(x, y)) return common.newAtomValue([]const u8, "t");
+    return nil();
+}
+
+pub fn boolEq(x: *const Value, y: *const Value) bool {
+    if (x == nil() or y == nil()) return x == y;
+    switch (x.*) {
+        Value.number => |xx| switch (y.*) {
+            Value.number => |yy| return xx == yy,
+            else => return false,
+        },
+        Value.symbol => |xx| switch (y.*) {
+            Value.symbol => |yy| return std.mem.eql(u8, xx, yy),
+            else => return false,
+        },
+        Value.cons => |xx| switch (y.*) {
+            Value.cons => |yy| return boolEq(xx.car, yy.car) and boolEq(xx.cdr, yy.cdr),
+            else => return false,
+        },
+        Value.function => |xx| switch (y.*) {
+            Value.function => |yy| return std.mem.eql(u8, xx.name, yy.name), // equality based on name
+            else => return false,
+        },
+    }
 }
 
 // built-in func

@@ -174,6 +174,16 @@ test "tokenize" {
             .code = "(if nil 'true)",
             .want = parse("nil"),
         },
+        TestCase{
+            .code =
+            \\(progn
+            \\  (defun fibonacci (n)
+            \\    (if (or (eq n 0) (eq n 1)) 1
+            \\      (+ (fibonacci (- n 1)) (fibonacci (- n 2)))))
+            \\  (fibonacci 10))
+            ,
+            .want = parse("89"),
+        },
     };
 
     std.testing.log_level = std.log.Level.debug;
@@ -181,29 +191,7 @@ test "tokenize" {
         const code = c.code;
         std.log.debug("test {}: {s}", .{ i, code });
         const get = eval(code);
-        try std.testing.expect(eq(get, c.want));
+        try std.testing.expect(E.boolEq(get, c.want));
         std.log.info("test result: ok", .{});
-    }
-}
-
-fn eq(a: *const Value, b: *const Value) bool {
-    if (a == nil() or b == nil()) return a == b;
-    switch (a.*) {
-        Value.number => |aa| switch (b.*) {
-            Value.number => |bb| return aa == bb,
-            else => return false,
-        },
-        Value.symbol => |aa| switch (b.*) {
-            Value.symbol => |bb| return std.mem.eql(u8, aa, bb),
-            else => return false,
-        },
-        Value.cons => |aa| switch (b.*) {
-            Value.cons => |bb| return eq(aa.car, bb.car) and eq(aa.cdr, bb.cdr),
-            else => return false,
-        },
-        Value.function => |aa| switch (b.*) {
-            Value.function => |bb| return std.mem.eql(u8, aa.name, bb.name), // equality based on name
-            else => return false,
-        },
     }
 }
