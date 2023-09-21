@@ -135,32 +135,52 @@ const ValueTag = enum {
     number,
     symbol,
     cons,
+    function,
 };
 
 const Value = union(ValueTag) {
     number: i64,
     symbol: []const u8,
     cons: *Cons,
+    function: *Function,
 };
+
+const Function = struct {
+    name: []const u8,
+    params: [][]const u8,
+    body: *const Value,
+    env: *const Map, // captured env. scope?
+};
+
+fn newFunc(name: []const u8, params: [][]const u8, body: *const Value, env: *const Map) !*Function {
+    var ret: *Function = try alloc.create(Function);
+    ret.* = Function{
+        .name = name,
+        .params = params,
+        .body = body,
+        .env = env,
+    };
+    return ret;
+}
 
 const ParseResult = struct {
     value: *const Value,
     rest: []const Token,
 };
 
-fn newNilNilConsCell() !*Value {
+fn newNilNilConsCell() !*Value { // need this?
     var ret: *Value = try alloc.create(Value);
     ret.* = Value{ .cons = try newCons(nil(), nil()) };
     return ret;
 }
 
-fn newConsCell(car: *const Value, cdr: *const Value) !*Value {
+fn newConsValue(car: *const Value, cdr: *const Value) !*Value {
     var ret: *Value = try alloc.create(Value);
     ret.* = Value{ .cons = try newCons(car, cdr) };
     return ret;
 }
 
-fn newAtom(comptime T: type, value: T) !*Value {
+fn newAtomValue(comptime T: type, value: T) !*Value {
     var ret: *Value = try alloc.create(Value);
     switch (T) {
         i64 => ret.* = Value{ .number = value },
@@ -170,6 +190,13 @@ fn newAtom(comptime T: type, value: T) !*Value {
     return ret;
 }
 
+fn newFuncValue(name: []const u8, params: [][]const u8, body: *const Value, env: *const Map) !*Value {
+    var ret: *Value = try alloc.create(Value);
+    ret.* = Value{ .function = try newFunc(name, params, body, env) };
+    return ret;
+}
+
+// fn newFunction(name: []const Value)
 fn toStringDot(cell: *const Value) ![]const u8 {
     var builder = std.ArrayList(u8).init(alloc);
     defer builder.deinit();
@@ -196,6 +223,11 @@ fn toStringDotInner(cell: *const Value, builder: *std.ArrayList(u8)) !void {
             try builder.appendSlice(str);
         },
         Value.symbol => |sym| try builder.appendSlice(sym),
+        Value.function => |func| {
+            try builder.appendSlice("<function:");
+            try builder.appendSlice(func.name);
+            try builder.appendSlice(">");
+        },
     }
 }
 
@@ -222,15 +254,15 @@ fn parseSExpr(tokens: []const Token) anyerror!ParseResult {
         Token.quote => {
             // <quote> <sexpr> => (quote <sexpr>)
             var listResult = try parseSExpr(tail);
-            const quote = try newAtom([]const u8, "quote");
-            return ParseResult{ .value = try newConsCell(quote, try newConsCell(listResult.value, nil())), .rest = listResult.rest };
+            const quote = try newAtomValue([]const u8, "quote");
+            return ParseResult{ .value = try newConsValue(quote, try newConsValue(listResult.value, nil())), .rest = listResult.rest };
         },
         Token.int => |int| {
-            const atom = try newAtom(i64, int);
+            const atom = try newAtomValue(i64, int);
             return ParseResult{ .value = atom, .rest = tokens[1..] };
         },
         Token.symbol => |symbol| {
-            const atom = try newAtom([]const u8, symbol);
+            const atom = try newAtomValue([]const u8, symbol);
             return ParseResult{ .value = atom, .rest = tokens[1..] };
         },
         Token.right => @panic("unbalanced parens"),
@@ -252,7 +284,7 @@ fn parseList(tokens: []const Token) anyerror!ParseResult {
             // Parse following S-exprs
             const cdr = try parseList(car.rest);
             // Meld the results of them
-            const ret = try newConsCell(car.value, cdr.value);
+            const ret = try newConsValue(car.value, cdr.value);
             return ParseResult{ .value = ret, .rest = cdr.rest };
         },
     }
@@ -298,7 +330,7 @@ const Map = std.StringHashMap(*const Value);
 fn evalValue(x: *const Value, env: *Map) *const Value {
     // dump("+ evalValue: {s}\n", .{toStringDot(x) catch unreachable});
     switch (x.*) {
-        Value.number => return x,
+        Value.number, Value.function => return x,
         Value.symbol => |sym| {
             if (env.get(sym)) |ent| return ent;
             return x;
@@ -306,6 +338,9 @@ fn evalValue(x: *const Value, env: *Map) *const Value {
         Value.cons => {
             const car = _car(x);
             switch (car.*) {
+                Value.number => @panic("number cannot be a function"),
+                Value.cons => @panic("cons cell cannot be a function"),
+                Value.function => @panic("unimplemented"),
                 Value.symbol => |sym| {
                     const eql = std.mem.eql;
                     // Built-in functions
@@ -320,7 +355,7 @@ fn evalValue(x: *const Value, env: *Map) *const Value {
                     if (eql(u8, sym, "cons")) {
                         const argCar = evalValue(_car(_cdr(x)), env);
                         const argCdr = evalValue(_car(_cdr(_cdr(x))), env);
-                        return newConsCell(argCar, argCdr) catch unreachable;
+                        return newConsValue(argCar, argCdr) catch unreachable;
                     }
                     if (eql(u8, sym, "print")) {
                         const arg = evalValue(_car(_cdr(x)), env);
@@ -328,31 +363,37 @@ fn evalValue(x: *const Value, env: *Map) *const Value {
                     }
                     if (eql(u8, sym, "+")) {
                         const ret = add(_cdr(x), env);
-                        return newAtom(i64, ret) catch unreachable;
+                        return newAtomValue(i64, ret) catch unreachable;
                     }
                     if (eql(u8, sym, "length")) {
                         const arg = evalValue(_car(_cdr(x)), env);
                         const ret = length(arg);
-                        return newAtom(i64, ret) catch unreachable;
+                        return newAtomValue(i64, ret) catch unreachable;
                     }
                     // Special forms
                     if (eql(u8, sym, "quote"))
                         return _car(_cdr(x));
                     if (eql(u8, sym, "progn"))
+                        // TODO: replace progn from special form to lambda and macro
                         return progn(_cdr(x), env);
                     if (eql(u8, sym, "setq"))
                         return setq(_cdr(x), env);
+                    if (eql(u8, sym, "defun")) {
+                        const name = _car(_cdr(x));
+                        const args = _car(_cdr(_cdr(x)));
+                        const body = _car(_cdr(_cdr(_cdr((x)))));
+                        return defun(name, args, body, env);
+                    }
 
                     std.log.err("umimplemented function: {s}\n", .{sym});
                     unreachable;
                 },
-                Value.number => @panic("number cannot be a function"),
-                Value.cons => @panic("cons cell cannot be a function"),
             }
         },
     }
 }
 
+// Convert list like (foo bar buz) to slice
 fn toSlice(head: *const Value) ![]*const Value {
     var ret = std.ArrayList(*const Value).init(alloc); // defer deinit?
     var h = head;
@@ -361,6 +402,19 @@ fn toSlice(head: *const Value) ![]*const Value {
         h = _cdr(h);
     }
     return try ret.toOwnedSlice();
+}
+
+// scope is lexical i.e. 'env' is the snapshot of parse's env
+fn defun(name: *const Value, params: *const Value, body: *const Value, env: *const Map) *const Value {
+    var symbols = std.ArrayList([]const u8).init(alloc);
+    var paramsSlice = toSlice(params) catch unreachable;
+    for (paramsSlice) |a| symbols.append(_symbolp(a).?) catch unreachable;
+    return newFuncValue(
+        _symbolp(name).?,
+        symbols.toOwnedSlice() catch unreachable,
+        body,
+        env,
+    ) catch unreachable;
 }
 
 fn setq(x: *const Value, env: *Map) *const Value {
@@ -523,14 +577,30 @@ test "tokenize" {
             .code = "(progn (setq menu '(tea coffee milk)) (cons (car (cdr menu)) (cons (car menu) (cdr (cdr menu)))))",
             .want = try parse("(coffee tea milk)"),
         },
+        TestCase{
+            .code = "(progn (defun double (x) (+ x x)) (double 1))",
+            .want = try parse("2"),
+        },
     };
 
-    for (cases) |c| {
+    std.testing.log_level = std.log.Level.info;
+    for (cases, 1..) |c, index| {
         const code = c.code;
         const get = try eval(code);
         try std.testing.expect(eq(get, c.want));
+        std.log.info("test {}: ok", .{index});
+    }
+
+    {
+        const code = "(defun double (x) (+ x x))";
+        const get = try eval(code);
+        try std.testing.expectEqualStrings("double", get.function.name[0..]);
+        std.log.info("test ok", .{});
     }
 }
+
+// defunをパースするとき -> その時のenvを渡し、functionオブジェクトで持つ
+// defunを呼ぶとき -> その時のenvを渡さず、functionオブジェクトが持っているenvを使う
 
 fn eq(a: *const Value, b: *const Value) bool {
     if (a == nil() or b == nil()) return a == b;
@@ -545,6 +615,10 @@ fn eq(a: *const Value, b: *const Value) bool {
         },
         Value.cons => |aa| switch (b.*) {
             Value.cons => |bb| return eq(aa.car, bb.car) and eq(aa.cdr, bb.cdr),
+            else => return false,
+        },
+        Value.function => |aa| switch (b.*) {
+            Value.function => |bb| return std.mem.eql(u8, aa.name, bb.name), // equality based on name
             else => return false,
         },
     }
