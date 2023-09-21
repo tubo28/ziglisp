@@ -9,39 +9,6 @@ const Value = common.Value;
 
 const Token = @import("tokenize.zig").Token;
 
-fn _car(cons: *const Value) *const Value {
-    return cons.cons.car;
-}
-
-fn _cdr(cons: *const Value) *const Value {
-    return cons.cons.cdr;
-}
-
-fn _cons(car: *const Value, cdr: *const Value) *const Value {
-    return common.newConsValue(car, cdr);
-}
-
-fn _atomp(cons: *const Value) ?*const Value {
-    switch (cons.*) {
-        Value.cons => return null,
-        else => return cons,
-    }
-}
-
-fn _numberp(atom: *const Value) ?i64 {
-    switch (atom.*) {
-        Value.number => |num| return num,
-        else => return null,
-    }
-}
-
-fn _symbolp(atom: *const Value) ?[]const u8 {
-    switch (atom.*) {
-        Value.symbol => |sym| return sym,
-        else => return null,
-    }
-}
-
 pub fn evaluate(x: *const Value, env: *Map) *const Value {
     //     std.log.debug("evaluate arg: {s}", .{tos(x)});
     switch (x.*) {
@@ -119,7 +86,8 @@ fn toEvaledSlice(head: *const Value, env: *Map) []*const Value {
     return ret;
 }
 
-/// scope is lexical i.e. 'env' is the snapshot of parse's env
+// special form
+// scope is lexical i.e. 'env' is the snapshot of parse's env
 fn defun(name: *const Value, params: *const Value, body: *const Value, env: *const Map) *const Value {
     // defunをパースするとき -> その時のenvを渡し、functionオブジェクトで持つ
     // defunを呼ぶとき -> その時のenvを渡さず、functionオブジェクトが持っているenvを使う
@@ -134,6 +102,7 @@ fn defun(name: *const Value, params: *const Value, body: *const Value, env: *con
     );
 }
 
+// special form
 fn setq(x: *const Value, env: *Map) *const Value {
     if (x == nil()) return nil();
     const sym = _symbolp(_car(x)).?;
@@ -142,6 +111,7 @@ fn setq(x: *const Value, env: *Map) *const Value {
     return val;
 }
 
+// special form
 fn progn(x: *const Value, env: *Map) *const Value {
     const slice = toSlice(x);
     var ret = nil();
@@ -149,17 +119,59 @@ fn progn(x: *const Value, env: *Map) *const Value {
     return ret; // the last result of 'evaluate' is returned
 }
 
+// built-in func
+fn _car(cons: *const Value) *const Value {
+    return cons.cons.car;
+}
+
+// built-in func
+fn _cdr(cons: *const Value) *const Value {
+    return cons.cons.cdr;
+}
+
+// built-in func
+fn _cons(car: *const Value, cdr: *const Value) *const Value {
+    return common.newConsValue(car, cdr);
+}
+
+// built-in func
+fn _atomp(cons: *const Value) ?*const Value {
+    switch (cons.*) {
+        Value.cons => return null,
+        else => return cons,
+    }
+}
+
+// built-in func
+fn _numberp(atom: *const Value) ?i64 {
+    switch (atom.*) {
+        Value.number => |num| return num,
+        else => return null,
+    }
+}
+
+// built-in func
+fn _symbolp(atom: *const Value) ?[]const u8 {
+    switch (atom.*) {
+        Value.symbol => |sym| return sym,
+        else => return null,
+    }
+}
+
+// built-in func
 fn _add(xs: []*const Value) *const Value {
     var ret: i64 = 0;
     for (xs) |x| ret += _numberp(x).?;
     return common.newAtomValue(i64, ret);
 }
 
+// built-in func
 fn _length(x: *const Value) *const Value {
     const slice = toSlice(x);
     return common.newAtomValue(i64, @intCast(slice.len));
 }
 
+// built-in func
 fn _print(x: *const Value) *const Value {
     const str = common.toStringDot(x);
     const stdout = std.io.getStdOut().writer();

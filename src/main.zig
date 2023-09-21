@@ -138,10 +138,10 @@ test "tokenize" {
             .code = "(progn (setq menu '(tea coffee milk)) (cons (car (cdr menu)) (cons (car menu) (cdr (cdr menu)))))",
             .want = parse("(coffee tea milk)"),
         },
-        // TestCase{
-        //     .code = "(progn (defun double (x) (+ x x)) (double 1))",
-        //     .want = parse("2"),
-        // },
+        TestCase{
+            .code = "(progn (defun double (x) (+ x x)) (double 1))",
+            .want = parse("2"),
+        },
     };
 
     std.testing.log_level = std.log.Level.debug;
