@@ -28,7 +28,7 @@ fn isSymbolChar(c: u8) bool {
 }
 
 fn tokenize(code: []const u8) ![]const Token {
-    var toks = std.ArrayList(Token).init(alloc);
+    var toks = std.ArrayList(Token).init(alloc); // defer deinit?
 
     var i: usize = 0;
     while (i < code.len) {
@@ -118,7 +118,7 @@ fn newCons(car: *const Value, cdr: *const Value) !*Cons {
 var _nil: ?*Value = null;
 
 // nil is a ConsCell such that both its car and cdr are itself.
-fn nil() *Value {
+fn nil() *const Value {
     if (_nil) |n| {
         return n;
     } else {
@@ -144,7 +144,7 @@ const Value = union(ValueTag) {
 };
 
 const ParseResult = struct {
-    value: *Value,
+    value: *const Value,
     rest: []const Token,
 };
 
@@ -353,6 +353,16 @@ fn evalValue(x: *const Value, env: *Map) *const Value {
     }
 }
 
+fn toSlice(head: *const Value) ![]*const Value {
+    var ret = std.ArrayList(*const Value).init(alloc); // defer deinit?
+    var h = head;
+    while (h != nil()) {
+        try ret.append(_car(h));
+        h = _cdr(h);
+    }
+    return try ret.toOwnedSlice();
+}
+
 fn setq(x: *const Value, env: *Map) *const Value {
     if (x == nil()) return nil();
     const sym = _symbolp(_car(x)).?;
@@ -362,36 +372,22 @@ fn setq(x: *const Value, env: *Map) *const Value {
 }
 
 fn progn(x: *const Value, env: *Map) *const Value {
-    if (x == nil()) return nil();
-    switch (x.*) {
-        Value.cons => {
-            const val = evalValue(_car(x), env);
-            if (_cdr(x) == nil()) return val;
-            return progn(_cdr(x), env);
-        },
-        else => @panic("wrong type argument"),
-    }
+    const slice = toSlice(x) catch unreachable;
+    var ret = nil();
+    for (slice) |a| ret = evalValue(a, env);
+    return ret; // the last is returned
 }
 
 fn add(x: *const Value, env: *Map) i64 {
-    if (x == nil()) return 0;
-    switch (x.*) {
-        Value.cons => {
-            const lhsValue = evalValue(_car(x), env);
-            const lhs = _numberp(_atomp(lhsValue).?).?;
-            return lhs + add(_cdr(x), env);
-        },
-        else => @panic("wrong type argument"),
-    }
+    const slice = toSlice(x) catch unreachable;
+    var ret: i64 = 0;
+    for (slice) |a| ret += _numberp(evalValue(a, env)).?;
+    return ret;
 }
 
 fn length(x: *const Value) i64 {
-    dump("+ length: {s}\n", .{toStringDot(x) catch unreachable});
-    if (x == nil()) return 0;
-    switch (x.*) {
-        Value.cons => return 1 + length(_cdr(x)),
-        else => @panic("cannot apply length for atom"),
-    }
+    const slice = toSlice(x) catch unreachable;
+    return @intCast(slice.len);
 }
 
 fn print(x: *const Value) *const Value {
