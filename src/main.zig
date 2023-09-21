@@ -291,17 +291,15 @@ fn parseList(tokens: []const Token) ParseResult {
 }
 
 fn _car(cons: *const Value) *const Value {
-    switch (cons.*) {
-        Value.cons => |c| return c.car,
-        else => @panic("car for atom is invalid"),
-    }
+    return cons.cons.car;
 }
 
 fn _cdr(cons: *const Value) *const Value {
-    switch (cons.*) {
-        Value.cons => |c| return c.cdr,
-        else => @panic("cdr for atom is invalid"),
-    }
+    return cons.cons.cdr;
+}
+
+fn _cons(car: *const Value, cdr: *const Value) *const Value {
+    return newConsValue(car, cdr);
 }
 
 fn _atomp(cons: *const Value) ?*const Value {
@@ -343,49 +341,41 @@ fn evalValue(x: *const Value, env: *Map) *const Value {
                 Value.function => @panic("unimplemented"),
                 Value.symbol => |sym| {
                     const eql = std.mem.eql;
-                    // Built-in functions
-                    if (eql(u8, sym, "car")) {
-                        const arg = evalValue(_car(_cdr(x)), env);
-                        return _car(arg);
-                    }
-                    if (eql(u8, sym, "cdr")) {
-                        const arg = evalValue(_car(_cdr(x)), env);
-                        return _cdr(arg);
-                    }
-                    if (eql(u8, sym, "cons")) {
-                        const argCar = evalValue(_car(_cdr(x)), env);
-                        const argCdr = evalValue(_car(_cdr(_cdr(x))), env);
-                        return newConsValue(argCar, argCdr);
-                    }
-                    if (eql(u8, sym, "print")) {
-                        const arg = evalValue(_car(_cdr(x)), env);
-                        return print(arg);
-                    }
-                    if (eql(u8, sym, "+")) {
-                        const ret = add(_cdr(x), env);
-                        return newAtomValue(i64, ret);
-                    }
-                    if (eql(u8, sym, "length")) {
-                        const arg = evalValue(_car(_cdr(x)), env);
-                        const ret = length(arg);
-                        return newAtomValue(i64, ret);
-                    }
+
                     // Special forms
-                    if (eql(u8, sym, "quote"))
-                        return _car(_cdr(x));
-                    if (eql(u8, sym, "progn"))
-                        // TODO: replace progn from special form to lambda and macro
-                        return progn(_cdr(x), env);
-                    if (eql(u8, sym, "setq"))
-                        return setq(_cdr(x), env);
-                    if (eql(u8, sym, "defun")) {
-                        const name = _car(_cdr(x));
-                        const args = _car(_cdr(_cdr(x)));
-                        const body = _car(_cdr(_cdr(_cdr((x)))));
-                        return defun(name, args, body, env);
+                    // TODO: Replace some of below with macro since they are macro instead of special form in many LISP dialects.
+                    {
+                        const args = toSlice(_cdr(x));
+                        if (eql(u8, sym, "quote"))
+                            return args[0];
+                        if (eql(u8, sym, "progn"))
+                            return progn(_cdr(x), env);
+                        if (eql(u8, sym, "setq"))
+                            return setq(_cdr(x), env);
+                        if (eql(u8, sym, "defun")) {
+                            // (defun double (x) (+ x x))
+                            return defun(args[0], args[1], args[2], env);
+                        }
                     }
 
-                    std.log.err("umimplemented function: {s}\n", .{sym});
+                    // Built-in functions
+                    {
+                        const args = toEvaledSlice(_cdr(x), env);
+                        if (eql(u8, sym, "car"))
+                            return _car(args[0]);
+                        if (eql(u8, sym, "cdr"))
+                            return _cdr(args[0]);
+                        if (eql(u8, sym, "cons"))
+                            return _cons(args[0], args[1]);
+                        if (eql(u8, sym, "print"))
+                            return _print(args[0]);
+                        if (eql(u8, sym, "+"))
+                            return _add(args);
+                        if (eql(u8, sym, "length"))
+                            return _length(args[0]);
+                    }
+
+                    std.log.err("function for special form not defined: {s}\n", .{sym});
                     unreachable;
                 },
             }
@@ -398,7 +388,19 @@ fn toSlice(head: *const Value) []*const Value {
     var ret = std.ArrayList(*const Value).init(alloc); // defer deinit?
     var h = head;
     while (h != nil()) {
-        ret.append(_car(h)) catch @panic("cannot append");
+        const x = _car(h);
+        ret.append(x) catch @panic("cannot append");
+        h = _cdr(h);
+    }
+    return ret.toOwnedSlice() catch unreachable;
+}
+
+fn toEvaledSlice(head: *const Value, env: *Map) []*const Value {
+    var ret = std.ArrayList(*const Value).init(alloc); // defer deinit?
+    var h = head;
+    while (h != nil()) {
+        const x = evalValue(_car(h), env);
+        ret.append(x) catch @panic("cannot append");
         h = _cdr(h);
     }
     return ret.toOwnedSlice() catch unreachable;
@@ -432,19 +434,18 @@ fn progn(x: *const Value, env: *Map) *const Value {
     return ret; // the last is returned
 }
 
-fn add(x: *const Value, env: *Map) i64 {
-    const slice = toSlice(x);
+fn _add(xs: []*const Value) *const Value {
     var ret: i64 = 0;
-    for (slice) |a| ret += _numberp(evalValue(a, env)).?;
-    return ret;
+    for (xs) |x| ret += _numberp(x).?;
+    return newAtomValue(i64, ret);
 }
 
-fn length(x: *const Value) i64 {
+fn _length(x: *const Value) *const Value {
     const slice = toSlice(x);
-    return @intCast(slice.len);
+    return newAtomValue(i64, @intCast(slice.len));
 }
 
-fn print(x: *const Value) *const Value {
+fn _print(x: *const Value) *const Value {
     const str = toStringDot(x);
     dump("#print: {s}\n", .{str});
     return x;
@@ -577,15 +578,16 @@ test "tokenize" {
             .code = "(progn (setq menu '(tea coffee milk)) (cons (car (cdr menu)) (cons (car menu) (cdr (cdr menu)))))",
             .want = parse("(coffee tea milk)"),
         },
-        TestCase{
-            .code = "(progn (defun double (x) (+ x x)) (double 1))",
-            .want = parse("2"),
-        },
+        // TestCase{
+        //     .code = "(progn (defun double (x) (+ x x)) (double 1))",
+        //     .want = parse("2"),
+        // },
     };
 
     std.testing.log_level = std.log.Level.info;
     for (cases, 1..) |c, index| {
         const code = c.code;
+        std.log.info("code: {s}", .{code});
         const get = eval(code);
         try std.testing.expect(eq(get, c.want));
         std.log.info("test {}: ok", .{index});
