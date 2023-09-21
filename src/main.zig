@@ -27,7 +27,7 @@ fn isSymbolChar(c: u8) bool {
     return !std.ascii.isWhitespace(c) and c != ')' and c != '(' and c != '\'';
 }
 
-fn tokenize(code: []const u8) ![]const Token {
+fn tokenize(code: []const u8) []const Token {
     var toks = std.ArrayList(Token).init(alloc); // defer deinit?
 
     var i: usize = 0;
@@ -39,19 +39,19 @@ fn tokenize(code: []const u8) ![]const Token {
         }
 
         if (code[i] == '(') {
-            try toks.append(Token{ .left = {} });
+            toks.append(Token{ .left = {} }) catch unreachable;
             i += 1;
             continue;
         }
 
         if (code[i] == ')') {
-            try toks.append(Token{ .right = {} });
+            toks.append(Token{ .right = {} }) catch unreachable;
             i += 1;
             continue;
         }
 
         if (code[i] == '\'') {
-            try toks.append(Token{ .quote = {} });
+            toks.append(Token{ .quote = {} }) catch unreachable;
             i += 1;
             continue;
         }
@@ -61,8 +61,8 @@ fn tokenize(code: []const u8) ![]const Token {
             while (i < code.len and ascii.isDigit(code[i])) {
                 i += 1;
             }
-            const val = try std.fmt.parseInt(i64, code[begin..i], 10);
-            try toks.append(Token{ .int = val });
+            const val = std.fmt.parseInt(i64, code[begin..i], 10) catch unreachable;
+            toks.append(Token{ .int = val }) catch unreachable;
             continue;
         }
 
@@ -75,10 +75,10 @@ fn tokenize(code: []const u8) ![]const Token {
             const sym = code[begin..i];
             // special symbol
             if (std.mem.eql(u8, sym, "nil")) {
-                try toks.append(Token{ .nil = {} });
+                toks.append(Token{ .nil = {} }) catch unreachable;
                 continue;
             }
-            try toks.append(Token{ .symbol = sym });
+            toks.append(Token{ .symbol = sym }) catch unreachable;
             continue;
         }
 
@@ -87,20 +87,20 @@ fn tokenize(code: []const u8) ![]const Token {
     return toks.items;
 }
 
-fn eval(code: []const u8) !*const Value {
-    const tokens = try tokenize(code);
-    const sexpr = try parseSExpr(tokens);
-    dump("parse result: {s}\n", .{try toStringDot(sexpr.value)});
+fn eval(code: []const u8) *const Value {
+    const tokens = tokenize(code);
+    const sexpr = parseSExpr(tokens);
+    dump("parse result: {s}\n", .{toStringDot(sexpr.value)});
     var env = Map.init(alloc);
     const value = evalValue(sexpr.value, &env);
-    dump("eval result: {s}\n", .{try toStringDot(value)});
+    dump("eval result: {s}\n", .{toStringDot(value)});
     return value;
 }
 
-fn parse(code: []const u8) !*const Value {
-    const tokens = try tokenize(code);
-    const sexpr = try parseSExpr(tokens);
-    dump("parse result: {s}\n", .{try toStringDot(sexpr.value)});
+fn parse(code: []const u8) *const Value {
+    const tokens = tokenize(code);
+    const sexpr = parseSExpr(tokens);
+    dump("parse result: {s}\n", .{toStringDot(sexpr.value)});
     return sexpr.value;
 }
 
@@ -109,8 +109,8 @@ const Cons = struct {
     cdr: *const Value,
 };
 
-fn newCons(car: *const Value, cdr: *const Value) !*Cons {
-    var cons: *Cons = try alloc.create(Cons);
+fn newCons(car: *const Value, cdr: *const Value) *Cons {
+    var cons: *Cons = alloc.create(Cons) catch unreachable;
     cons.* = Cons{ .car = car, .cdr = cdr };
     return cons;
 }
@@ -123,7 +123,7 @@ fn nil() *const Value {
         return n;
     } else {
         var n: *Value = alloc.create(Value) catch @panic("errro");
-        n.* = Value{ .cons = newCons(n, n) catch @panic("message: []const u8") };
+        n.* = Value{ .cons = newCons(n, n) };
         _nil = n;
         return nil();
     }
@@ -152,8 +152,8 @@ const Function = struct {
     env: *const Map, // captured env. scope?
 };
 
-fn newFunc(name: []const u8, params: [][]const u8, body: *const Value, env: *const Map) !*Function {
-    var ret: *Function = try alloc.create(Function);
+fn newFunc(name: []const u8, params: [][]const u8, body: *const Value, env: *const Map) *Function {
+    var ret: *Function = alloc.create(Function) catch unreachable;
     ret.* = Function{
         .name = name,
         .params = params,
@@ -168,20 +168,20 @@ const ParseResult = struct {
     rest: []const Token,
 };
 
-fn newNilNilConsCell() !*Value { // need this?
-    var ret: *Value = try alloc.create(Value);
-    ret.* = Value{ .cons = try newCons(nil(), nil()) };
+fn newNilNilConsCell() *Value { // need this?
+    var ret: *Value = alloc.create(Value) catch unreachable;
+    ret.* = Value{ .cons = newCons(nil(), nil()) };
     return ret;
 }
 
-fn newConsValue(car: *const Value, cdr: *const Value) !*Value {
-    var ret: *Value = try alloc.create(Value);
-    ret.* = Value{ .cons = try newCons(car, cdr) };
+fn newConsValue(car: *const Value, cdr: *const Value) *Value {
+    var ret: *Value = alloc.create(Value) catch unreachable;
+    ret.* = Value{ .cons = newCons(car, cdr) };
     return ret;
 }
 
-fn newAtomValue(comptime T: type, value: T) !*Value {
-    var ret: *Value = try alloc.create(Value);
+fn newAtomValue(comptime T: type, value: T) *Value {
+    var ret: *Value = alloc.create(Value) catch unreachable;
     switch (T) {
         i64 => ret.* = Value{ .number = value },
         []const u8 => ret.* = Value{ .symbol = value },
@@ -190,43 +190,43 @@ fn newAtomValue(comptime T: type, value: T) !*Value {
     return ret;
 }
 
-fn newFuncValue(name: []const u8, params: [][]const u8, body: *const Value, env: *const Map) !*Value {
-    var ret: *Value = try alloc.create(Value);
-    ret.* = Value{ .function = try newFunc(name, params, body, env) };
+fn newFuncValue(name: []const u8, params: [][]const u8, body: *const Value, env: *const Map) *Value {
+    var ret: *Value = alloc.create(Value) catch unreachable;
+    ret.* = Value{ .function = newFunc(name, params, body, env) };
     return ret;
 }
 
 // fn newFunction(name: []const Value)
-fn toStringDot(cell: *const Value) ![]const u8 {
+fn toStringDot(cell: *const Value) []const u8 {
     var builder = std.ArrayList(u8).init(alloc);
     defer builder.deinit();
-    try toStringDotInner(cell, &builder);
-    return builder.toOwnedSlice();
+    toStringDotInner(cell, &builder);
+    return builder.toOwnedSlice() catch unreachable;
 }
 
-fn toStringDotInner(cell: *const Value, builder: *std.ArrayList(u8)) !void {
+fn toStringDotInner(cell: *const Value, builder: *std.ArrayList(u8)) void {
     if (cell == nil()) {
-        try builder.appendSlice("nil");
+        builder.appendSlice("nil") catch unreachable;
         return;
     }
     switch (cell.*) {
         Value.cons => |cons| {
-            try builder.appendSlice("(");
-            try toStringDotInner(cons.car, builder);
-            try builder.appendSlice(" . ");
-            try toStringDotInner(cons.cdr, builder);
-            try builder.appendSlice(")");
+            builder.appendSlice("(") catch unreachable;
+            toStringDotInner(cons.car, builder);
+            builder.appendSlice(" . ") catch unreachable;
+            toStringDotInner(cons.cdr, builder);
+            builder.appendSlice(")") catch unreachable;
         },
         Value.number => |num| {
-            var buffer: [20]u8 = undefined;
-            const str = try std.fmt.bufPrint(buffer[0..], "{}", .{num});
-            try builder.appendSlice(str);
+            var buffer: [30]u8 = undefined;
+            const str = std.fmt.bufPrint(buffer[0..], "{}", .{num}) catch @panic("too large integer");
+            builder.appendSlice(str) catch unreachable;
         },
-        Value.symbol => |sym| try builder.appendSlice(sym),
+        Value.symbol => |sym| builder.appendSlice(sym) catch unreachable,
         Value.function => |func| {
-            try builder.appendSlice("<function:");
-            try builder.appendSlice(func.name);
-            try builder.appendSlice(">");
+            builder.appendSlice("<function:") catch unreachable;
+            builder.appendSlice(func.name) catch unreachable;
+            builder.appendSlice(">") catch unreachable;
         },
     }
 }
@@ -234,7 +234,7 @@ fn toStringDotInner(cell: *const Value, builder: *std.ArrayList(u8)) !void {
 // <sexpr>  ::= <atom>
 //            | '(' <sexpr>* ')'
 //            | <quote> <sexpr>
-fn parseSExpr(tokens: []const Token) anyerror!ParseResult {
+fn parseSExpr(tokens: []const Token) ParseResult {
     if (tokens.len == 0) {
         // Should panic?
         @panic("no tokens");
@@ -247,22 +247,22 @@ fn parseSExpr(tokens: []const Token) anyerror!ParseResult {
     switch (head) {
         Token.left => {
             assert(tail.len != 0);
-            var ret = try parseList(tail);
+            var ret = parseList(tail);
             ret.rest = ret.rest[1..]; // consume ")"
             return ret;
         },
         Token.quote => {
             // <quote> <sexpr> => (quote <sexpr>)
-            var listResult = try parseSExpr(tail);
-            const quote = try newAtomValue([]const u8, "quote");
-            return ParseResult{ .value = try newConsValue(quote, try newConsValue(listResult.value, nil())), .rest = listResult.rest };
+            var listResult = parseSExpr(tail);
+            const quote = newAtomValue([]const u8, "quote");
+            return ParseResult{ .value = newConsValue(quote, newConsValue(listResult.value, nil())), .rest = listResult.rest };
         },
         Token.int => |int| {
-            const atom = try newAtomValue(i64, int);
+            const atom = newAtomValue(i64, int);
             return ParseResult{ .value = atom, .rest = tokens[1..] };
         },
         Token.symbol => |symbol| {
-            const atom = try newAtomValue([]const u8, symbol);
+            const atom = newAtomValue([]const u8, symbol);
             return ParseResult{ .value = atom, .rest = tokens[1..] };
         },
         Token.right => @panic("unbalanced parens"),
@@ -271,20 +271,20 @@ fn parseSExpr(tokens: []const Token) anyerror!ParseResult {
 }
 
 // <S-expr>*
-fn parseList(tokens: []const Token) anyerror!ParseResult {
+fn parseList(tokens: []const Token) ParseResult {
     if (tokens.len == 0) {
-        return ParseResult{ .value = try newNilNilConsCell(), .rest = tokens };
+        return ParseResult{ .value = newNilNilConsCell(), .rest = tokens };
     }
 
     switch (tokens[0]) {
         TokenTag.right => return ParseResult{ .value = nil(), .rest = tokens },
         else => {
             // Parse first S-expr
-            const car = try parseSExpr(tokens);
+            const car = parseSExpr(tokens);
             // Parse following S-exprs
-            const cdr = try parseList(car.rest);
+            const cdr = parseList(car.rest);
             // Meld the results of them
-            const ret = try newConsValue(car.value, cdr.value);
+            const ret = newConsValue(car.value, cdr.value);
             return ParseResult{ .value = ret, .rest = cdr.rest };
         },
     }
@@ -355,7 +355,7 @@ fn evalValue(x: *const Value, env: *Map) *const Value {
                     if (eql(u8, sym, "cons")) {
                         const argCar = evalValue(_car(_cdr(x)), env);
                         const argCdr = evalValue(_car(_cdr(_cdr(x))), env);
-                        return newConsValue(argCar, argCdr) catch unreachable;
+                        return newConsValue(argCar, argCdr);
                     }
                     if (eql(u8, sym, "print")) {
                         const arg = evalValue(_car(_cdr(x)), env);
@@ -363,12 +363,12 @@ fn evalValue(x: *const Value, env: *Map) *const Value {
                     }
                     if (eql(u8, sym, "+")) {
                         const ret = add(_cdr(x), env);
-                        return newAtomValue(i64, ret) catch unreachable;
+                        return newAtomValue(i64, ret);
                     }
                     if (eql(u8, sym, "length")) {
                         const arg = evalValue(_car(_cdr(x)), env);
                         const ret = length(arg);
-                        return newAtomValue(i64, ret) catch unreachable;
+                        return newAtomValue(i64, ret);
                     }
                     // Special forms
                     if (eql(u8, sym, "quote"))
@@ -394,27 +394,27 @@ fn evalValue(x: *const Value, env: *Map) *const Value {
 }
 
 // Convert list like (foo bar buz) to slice
-fn toSlice(head: *const Value) ![]*const Value {
+fn toSlice(head: *const Value) []*const Value {
     var ret = std.ArrayList(*const Value).init(alloc); // defer deinit?
     var h = head;
     while (h != nil()) {
-        try ret.append(_car(h));
+        ret.append(_car(h)) catch @panic("cannot append");
         h = _cdr(h);
     }
-    return try ret.toOwnedSlice();
+    return ret.toOwnedSlice() catch unreachable;
 }
 
 // scope is lexical i.e. 'env' is the snapshot of parse's env
 fn defun(name: *const Value, params: *const Value, body: *const Value, env: *const Map) *const Value {
     var symbols = std.ArrayList([]const u8).init(alloc);
-    var paramsSlice = toSlice(params) catch unreachable;
+    var paramsSlice = toSlice(params);
     for (paramsSlice) |a| symbols.append(_symbolp(a).?) catch unreachable;
     return newFuncValue(
         _symbolp(name).?,
         symbols.toOwnedSlice() catch unreachable,
         body,
         env,
-    ) catch unreachable;
+    );
 }
 
 fn setq(x: *const Value, env: *Map) *const Value {
@@ -426,26 +426,26 @@ fn setq(x: *const Value, env: *Map) *const Value {
 }
 
 fn progn(x: *const Value, env: *Map) *const Value {
-    const slice = toSlice(x) catch unreachable;
+    const slice = toSlice(x);
     var ret = nil();
     for (slice) |a| ret = evalValue(a, env);
     return ret; // the last is returned
 }
 
 fn add(x: *const Value, env: *Map) i64 {
-    const slice = toSlice(x) catch unreachable;
+    const slice = toSlice(x);
     var ret: i64 = 0;
     for (slice) |a| ret += _numberp(evalValue(a, env)).?;
     return ret;
 }
 
 fn length(x: *const Value) i64 {
-    const slice = toSlice(x) catch unreachable;
+    const slice = toSlice(x);
     return @intCast(slice.len);
 }
 
 fn print(x: *const Value) *const Value {
-    const str = toStringDot(x) catch unreachable;
+    const str = toStringDot(x);
     dump("#print: {s}\n", .{str});
     return x;
 }
@@ -479,121 +479,121 @@ test "tokenize" {
     const cases = [_]TestCase{
         TestCase{
             .code = "(+ 1 2)",
-            .want = try parse("3"),
+            .want = parse("3"),
         },
         TestCase{
             .code = "(+ 1 2 (+ 3 4) (+ 5 (+ 6 7)) 8 9 10)",
-            .want = try parse("55"),
+            .want = parse("55"),
         },
         TestCase{
             .code = "'(1 2 3)",
-            .want = try parse("(1 2 3)"),
+            .want = parse("(1 2 3)"),
         },
         TestCase{
             .code = "(length '(1 2 3))",
-            .want = try parse("3"),
+            .want = parse("3"),
         },
         TestCase{
             .code = "(+ (length '(a b c)) (length '(d e)))",
-            .want = try parse("5"),
+            .want = parse("5"),
         },
         TestCase{
             .code = "(print hello)",
-            .want = try parse("hello"),
+            .want = parse("hello"),
         },
         TestCase{
             .code = "(progn (print hello) (print world) (+ (length '(a b c)) (length '(d e))))",
-            .want = try parse("5"),
+            .want = parse("5"),
         },
         TestCase{
             .code = "(setq menu '(tea coffee milk))",
-            .want = try parse("(tea coffee milk)"),
+            .want = parse("(tea coffee milk)"),
         },
         TestCase{
             .code = "(progn (setq a 1) (setq b 2) (+ a b 3))",
-            .want = try parse("6"),
+            .want = parse("6"),
         },
         TestCase{
             .code = "(progn (setq p '(3 1 4 1 5)) (print (length p)))",
-            .want = try parse("5"),
+            .want = parse("5"),
         },
         TestCase{
             .code = "(car '(a b c))",
-            .want = try parse("a"),
+            .want = parse("a"),
         },
         TestCase{
             .code = "(car '((a b) (c d)))",
-            .want = try parse("(a b)"),
+            .want = parse("(a b)"),
         },
         TestCase{
             .code = "(progn (setq menu '(tea coffee milk)) (car menu))",
-            .want = try parse("tea"),
+            .want = parse("tea"),
         },
         TestCase{
             .code = "(progn (setq menu '(tea coffee milk)) (cdr menu))",
-            .want = try parse("(coffee milk)"),
+            .want = parse("(coffee milk)"),
         },
         TestCase{
             .code = "(progn (setq menu '(tea coffee milk)) (cdr (cdr menu)))",
-            .want = try parse("(milk)"),
+            .want = parse("(milk)"),
         },
         TestCase{
             .code = "(progn (setq menu '(tea coffee milk)) (cdr (cdr (cdr menu))))",
-            .want = try parse("nil"),
+            .want = parse("nil"),
         },
         TestCase{
             .code = "(progn (setq menu '(tea coffee milk)) (car (cdr menu)))",
-            .want = try parse("coffee"),
+            .want = parse("coffee"),
         },
         TestCase{
             .code = "(cons '(a b) '(c d))",
-            .want = try parse("((a b) c d)"),
+            .want = parse("((a b) c d)"),
         },
         TestCase{
             .code = "(progn (setq menu '(tea coffee milk)) (cons 'cocoa menu))",
-            .want = try parse("(cocoa tea coffee milk)"),
+            .want = parse("(cocoa tea coffee milk)"),
         },
         TestCase{
             .code = "(progn (setq menu '(tea coffee milk)) (cons 'cocoa (cdr menu)))",
-            .want = try parse("(cocoa coffee milk)"),
+            .want = parse("(cocoa coffee milk)"),
         },
         TestCase{
             .code = "(progn (setq menu '(tea coffee milk)) (car (cdr (cdr menu))))",
-            .want = try parse("milk"),
+            .want = parse("milk"),
         },
         TestCase{
             .code = "(progn (setq menu '(tea coffee milk)) (cons 'juice (cdr menu))))",
-            .want = try parse("(juice coffee milk)"),
+            .want = parse("(juice coffee milk)"),
         },
         TestCase{
             .code = "(progn (setq menu '(tea coffee milk)) (cons (car menu) (cons 'juice (cdr menu))))",
-            .want = try parse("(tea juice coffee milk)"),
+            .want = parse("(tea juice coffee milk)"),
         },
         TestCase{
             .code = "(progn (setq menu '(tea coffee milk)) (cons (car menu) (cdr (cdr menu))))",
-            .want = try parse("(tea milk)"),
+            .want = parse("(tea milk)"),
         },
         TestCase{
             .code = "(progn (setq menu '(tea coffee milk)) (cons (car (cdr menu)) (cons (car menu) (cdr (cdr menu)))))",
-            .want = try parse("(coffee tea milk)"),
+            .want = parse("(coffee tea milk)"),
         },
         TestCase{
             .code = "(progn (defun double (x) (+ x x)) (double 1))",
-            .want = try parse("2"),
+            .want = parse("2"),
         },
     };
 
     std.testing.log_level = std.log.Level.info;
     for (cases, 1..) |c, index| {
         const code = c.code;
-        const get = try eval(code);
+        const get = eval(code);
         try std.testing.expect(eq(get, c.want));
         std.log.info("test {}: ok", .{index});
     }
 
     {
         const code = "(defun double (x) (+ x x))";
-        const get = try eval(code);
+        const get = eval(code);
         try std.testing.expectEqualStrings("double", get.function.name[0..]);
         std.log.info("test ok", .{});
     }
