@@ -7,8 +7,7 @@ const nil = common.nil;
 const tos = common.toStringDot;
 const Value = common.Value;
 
-const T = @import("tokenize.zig");
-const Token = T.Token;
+const Token = @import("tokenize.zig").Token;
 
 fn _car(cons: *const Value) *const Value {
     return cons.cons.car;
@@ -115,14 +114,9 @@ fn toSlice(head: *const Value) []*const Value {
 }
 
 fn toEvaledSlice(head: *const Value, env: *Map) []*const Value {
-    var ret = std.ArrayList(*const Value).init(alloc); // defer deinit?
-    var h = head;
-    while (h != nil()) {
-        const x = evaluate(_car(h), env);
-        ret.append(x) catch @panic("cannot append");
-        h = _cdr(h);
-    }
-    return ret.toOwnedSlice() catch unreachable;
+    var ret = toSlice(head);
+    for (ret) |*x| x.* = evaluate(x.*, env);
+    return ret;
 }
 
 // defunをパースするとき -> その時のenvを渡し、functionオブジェクトで持つ
@@ -151,8 +145,8 @@ fn setq(x: *const Value, env: *Map) *const Value {
 fn progn(x: *const Value, env: *Map) *const Value {
     const slice = toSlice(x);
     var ret = nil();
-    for (slice) |a| ret = evaluate(a, env);
-    return ret; // the last is returned
+    for (slice) |p| ret = evaluate(p, env);
+    return ret; // the last result of 'evaluate' is returned
 }
 
 fn _add(xs: []*const Value) *const Value {

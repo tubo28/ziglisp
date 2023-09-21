@@ -75,14 +75,12 @@ var _nil: ?*Value = null;
 
 // nil is a ConsCell such that both its car and cdr are itself.
 pub fn nil() *const Value {
-    if (_nil) |n| {
-        return n;
-    } else {
-        var n: *Value = alloc.create(Value) catch @panic("errro");
-        n.* = Value{ .cons = newCons(n, n) };
-        _nil = n;
-        return nil();
-    }
+    if (_nil) |n| return n;
+
+    var n: *Value = alloc.create(Value) catch @panic("errro");
+    n.* = Value{ .cons = newCons(n, n) };
+    _nil = n;
+    return nil();
 }
 
 pub fn toStringDot(cell: *const Value) []const u8 {

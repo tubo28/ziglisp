@@ -1,8 +1,7 @@
 const std = @import("std");
 pub const assert = std.debug.assert;
 
-const T = @import("tokenize.zig");
-const Token = T.Token;
+const Token = @import("tokenize.zig").Token;
 
 const common = @import("common.zig");
 const Value = common.Value;
@@ -34,7 +33,7 @@ pub fn parse(tokens: []const Token) ParseResult {
         },
         Token.quote => {
             // <quote> <sexpr> => (quote <sexpr>)
-            var listResult = parse(tail);
+            const listResult = parse(tail);
             const quote = common.newAtomValue([]const u8, "quote");
             return ParseResult{
                 .value = common.newConsValue(quote, common.newConsValue(listResult.value, nil())),

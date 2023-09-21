@@ -55,9 +55,8 @@ pub fn tokenize(code: []const u8) []const Token {
 
         if (ascii.isDigit(code[i])) {
             var begin = i;
-            while (i < code.len and ascii.isDigit(code[i])) {
+            while (i < code.len and ascii.isDigit(code[i]))
                 i += 1;
-            }
             const val = std.fmt.parseInt(i64, code[begin..i], 10) catch unreachable;
             toks.append(Token{ .int = val }) catch unreachable;
             continue;
@@ -66,9 +65,8 @@ pub fn tokenize(code: []const u8) []const Token {
         // All other chars are parts of as symbol
         {
             var begin = i;
-            while (i < code.len and isSymbolChar(code[i])) {
+            while (i < code.len and isSymbolChar(code[i]))
                 i += 1;
-            }
             const sym = code[begin..i];
             // special symbol
             if (std.mem.eql(u8, sym, "nil")) {
