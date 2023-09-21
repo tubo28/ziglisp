@@ -150,6 +150,30 @@ test "tokenize" {
             .code = "(progn (defun double (x) (+ x x)) (double (double 1)))",
             .want = parse("4"),
         },
+        TestCase{
+            .code = "(if t 'true 'false)",
+            .want = parse("true"),
+        },
+        TestCase{
+            .code = "(if 0 'true 'false)",
+            .want = parse("true"),
+        },
+        TestCase{
+            .code = "(if nil 'true 'false)",
+            .want = parse("false"),
+        },
+        TestCase{
+            .code = "(if () 'true 'false)",
+            .want = parse("false"),
+        },
+        TestCase{
+            .code = "(if t 'true)",
+            .want = parse("true"),
+        },
+        TestCase{
+            .code = "(if nil 'true)",
+            .want = parse("nil"),
+        },
     };
 
     std.testing.log_level = std.log.Level.debug;

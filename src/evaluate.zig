@@ -12,6 +12,7 @@ const Token = @import("tokenize.zig").Token;
 
 pub fn evaluate(x: *const Value, env: *Map) *const Value {
     //     std.log.debug("evaluate arg: {s}", .{tos(x)});
+    if (isNil(x)) return x;
     switch (x.*) {
         Value.number, Value.function => return x,
         Value.symbol => |sym| {
@@ -28,8 +29,7 @@ pub fn evaluate(x: *const Value, env: *Map) *const Value {
                     const eql = std.mem.eql;
 
                     // Special forms
-                    // TODO: Replace some of below with macro,
-                    //   since they are macro (not special form) in many LISP dialects.
+                    // TODO: Rewrite some of below with macro. They are macro (not special form) in many LISP dialects.
                     {
                         const args = toSlice(_cdr(x));
                         if (eql(u8, sym, "quote"))
@@ -38,10 +38,10 @@ pub fn evaluate(x: *const Value, env: *Map) *const Value {
                             return progn(_cdr(x), env);
                         if (eql(u8, sym, "setq"))
                             return setq(_cdr(x), env);
-                        if (eql(u8, sym, "defun")) {
-                            // (defun double (x) (+ x x))
+                        if (eql(u8, sym, "defun"))
                             return defun(args[0], args[1], args[2], env);
-                        }
+                        if (eql(u8, sym, "if"))
+                            return _if(args[0], args[1], if (args.len >= 3) args[2] else null, env);
                     }
 
                     // User-defined functions
@@ -111,6 +111,21 @@ fn toEvaledSlice(head: *const Value, env: *Map) []*const Value {
 }
 
 // special form
+fn _if(cond: *const Value, t: *const Value, f: ?*const Value, env: *Map) *const Value {
+    if (!isNil(evaluate(cond, env))) return evaluate(t, env);
+    if (f) |ff| return evaluate(ff, env);
+    return nil();
+}
+
+fn isNil(x: *const Value) bool {
+    if (x == nil()) return true;
+    switch (x.*) {
+        Value.cons => |cons| if (cons.car == nil() and cons.cdr == nil()) return true else return false,
+        else => return false,
+    }
+}
+
+// special form
 // scope is lexical i.e. 'env' is the snapshot of parse's env
 // TODO: defun can be rewritten using lambda and macro
 fn defun(name: *const Value, params: *const Value, body: *const Value, env: *Map) *const Value {
@@ -134,7 +149,7 @@ fn defun(name: *const Value, params: *const Value, body: *const Value, env: *Map
 
 // special form
 fn setq(x: *const Value, env: *Map) *const Value {
-    if (x == nil()) return nil();
+    if (isNil(x)) return nil(); // TODO: use toSlice
     const sym = _symbolp(_car(x)).?;
     const val = evaluate(_car(_cdr(x)), env);
     env.put(sym, val) catch unreachable;
