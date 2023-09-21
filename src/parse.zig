@@ -12,9 +12,10 @@ pub const ParseResult = struct {
     rest: []const Token,
 };
 
-// <sexpr>  ::= <atom>
-//            | '(' <sexpr>* ')'
-//            | <quote> <sexpr>
+/// Parse s-expression based on following BFN
+/// <sexpr>  ::= <atom>
+///            | '(' <sexpr>* ')'
+///            | <quote> <sexpr>
 pub fn parse(tokens: []const Token) ParseResult {
     if (tokens.len == 0) {
         // Should panic?
@@ -53,6 +54,7 @@ pub fn parse(tokens: []const Token) ParseResult {
     }
 }
 
+// Parse s-expression based on following BFN
 // <S-expr>*
 fn parseList(tokens: []const Token) ParseResult {
     if (tokens.len == 0) {

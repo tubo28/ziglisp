@@ -119,10 +119,10 @@ fn toEvaledSlice(head: *const Value, env: *Map) []*const Value {
     return ret;
 }
 
-// defunをパースするとき -> その時のenvを渡し、functionオブジェクトで持つ
-// defunを呼ぶとき -> その時のenvを渡さず、functionオブジェクトが持っているenvを使う
-// scope is lexical i.e. 'env' is the snapshot of parse's env
+/// scope is lexical i.e. 'env' is the snapshot of parse's env
 fn defun(name: *const Value, params: *const Value, body: *const Value, env: *const Map) *const Value {
+    // defunをパースするとき -> その時のenvを渡し、functionオブジェクトで持つ
+    // defunを呼ぶとき -> その時のenvを渡さず、functionオブジェクトが持っているenvを使う
     var symbols = std.ArrayList([]const u8).init(alloc);
     var paramsSlice = toSlice(params);
     for (paramsSlice) |a| symbols.append(_symbolp(a).?) catch unreachable;

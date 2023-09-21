@@ -15,8 +15,8 @@ pub fn newCons(car: *const Value, cdr: *const Value) *Cons {
     return cons;
 }
 
-// Node of tree.
-// On tree, it is a branch if cons, otherwise leaf
+/// Node of tree.
+/// It is a branch only if cons, otherwise leaf
 const ValueTag = enum {
     number,
     symbol,
@@ -73,7 +73,7 @@ pub fn newFunc(name: []const u8, params: [][]const u8, body: *const Value, env: 
 
 var _nil: ?*Value = null;
 
-// nil is a ConsCell such that both its car and cdr are itself.
+/// nil is a ConsCell such that both its car and cdr are itself.
 pub fn nil() *const Value {
     if (_nil) |n| return n;
 
