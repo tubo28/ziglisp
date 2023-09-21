@@ -53,7 +53,7 @@ pub fn newFuncValue(name: []const u8, params: [][]const u8, body: *const Value, 
     return ret;
 }
 
-const Function = struct {
+pub const Function = struct {
     name: []const u8,
     params: [][]const u8,
     body: *const Value,

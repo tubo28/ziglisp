@@ -142,22 +142,23 @@ test "tokenize" {
             .code = "(progn (defun double (x) (+ x x)) (double 1))",
             .want = parse("2"),
         },
+        TestCase{
+            .code = "(progn (defun double (x) (+ x x)) (double (double 1)))",
+            .want = parse("4"),
+        },
+        TestCase{
+            .code = "(progn (defun double (x) (+ x x)) (double (double 1)))",
+            .want = parse("4"),
+        },
     };
 
     std.testing.log_level = std.log.Level.debug;
-    for (cases, 1..) |c, index| {
+    for (cases, 1..) |c, i| {
         const code = c.code;
-        std.log.debug("code: {s}", .{code});
+        std.log.debug("test {}: {s}", .{ i, code });
         const get = eval(code);
         try std.testing.expect(eq(get, c.want));
-        std.log.info("test {}: ok", .{index});
-    }
-
-    {
-        const code = "(defun double (x) (+ x x))";
-        const get = eval(code);
-        try std.testing.expectEqualStrings("double", get.function.name[0..]);
-        std.log.info("defun test ok", .{});
+        std.log.info("test result: ok", .{});
     }
 }
 

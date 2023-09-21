@@ -2,6 +2,7 @@ const std = @import("std");
 
 const common = @import("common.zig");
 const alloc = common.alloc;
+const Function = common.Function;
 const Map = common.Map;
 const nil = common.nil;
 const tos = common.toStringDot;
@@ -27,7 +28,8 @@ pub fn evaluate(x: *const Value, env: *Map) *const Value {
                     const eql = std.mem.eql;
 
                     // Special forms
-                    // TODO: Replace some of below with macro since they are macro instead of special form in many LISP dialects.
+                    // TODO: Replace some of below with macro,
+                    //   since they are macro (not special form) in many LISP dialects.
                     {
                         const args = toSlice(_cdr(x));
                         if (eql(u8, sym, "quote"))
@@ -40,6 +42,13 @@ pub fn evaluate(x: *const Value, env: *Map) *const Value {
                             // (defun double (x) (+ x x))
                             return defun(args[0], args[1], args[2], env);
                         }
+                    }
+
+                    // User-defined functions
+                    if (env.get(sym)) |func| {
+                        const f = func.function;
+                        const args = toEvaledSlice(_cdr(x), env);
+                        return call(f, args);
                     }
 
                     // Built-in functions
@@ -60,12 +69,27 @@ pub fn evaluate(x: *const Value, env: *Map) *const Value {
                             return _length(args[0]);
                     }
 
-                    std.log.err("function for special form not defined: {s}\n", .{sym});
+                    std.log.err("function or special form not defined: {s}\n", .{sym});
                     unreachable;
                 },
             }
         },
     }
+}
+
+fn call(func: *const Function, args: []*const Value) *const Value {
+    // defunをパースするとき -> その時のenvを渡し、functionオブジェクトで持つ
+    // defunを呼ぶとき -> その時のenvを渡さず、functionオブジェクトが持っているenvを使う ただし引数だけ追加（上書き）する
+    if (func.params.len != args.len) {
+        std.log.err("wrong number of argument for {s}", .{func.name});
+        @panic("wrong number of arguments");
+    }
+
+    var newEnv = func.env.clone() catch unreachable;
+    for (func.params, args) |param, arg|
+        newEnv.put(param, arg) catch unreachable; // overwrite if entry exist
+
+    return evaluate(func.body, &newEnv);
 }
 
 // Convert list like (foo bar buz) to slice
@@ -88,18 +112,24 @@ fn toEvaledSlice(head: *const Value, env: *Map) []*const Value {
 
 // special form
 // scope is lexical i.e. 'env' is the snapshot of parse's env
-fn defun(name: *const Value, params: *const Value, body: *const Value, env: *const Map) *const Value {
+// TODO: defun can be rewritten using lambda and macro
+fn defun(name: *const Value, params: *const Value, body: *const Value, env: *Map) *const Value {
     // defunをパースするとき -> その時のenvを渡し、functionオブジェクトで持つ
     // defunを呼ぶとき -> その時のenvを渡さず、functionオブジェクトが持っているenvを使う
-    var symbols = std.ArrayList([]const u8).init(alloc);
-    var paramsSlice = toSlice(params);
-    for (paramsSlice) |a| symbols.append(_symbolp(a).?) catch unreachable;
-    return common.newFuncValue(
-        _symbolp(name).?,
-        symbols.toOwnedSlice() catch unreachable,
+    var paramSymbols = std.ArrayList([]const u8).init(alloc);
+    {
+        var tmp = toSlice(params);
+        for (tmp) |a| paramSymbols.append(_symbolp(a).?) catch unreachable;
+    }
+    const nameSymbol = _symbolp(name).?;
+    const func = common.newFuncValue(
+        nameSymbol,
+        paramSymbols.toOwnedSlice() catch unreachable,
         body,
         env,
     );
+    env.put(nameSymbol, func) catch unreachable;
+    return func;
 }
 
 // special form
