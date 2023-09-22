@@ -17,24 +17,27 @@ pub fn main() void {
 
 fn eval(code: []const u8) *const Value {
     const tokens = T.tokenize(code);
-    const sexpr = P.parse(tokens);
+    const sexprs = P.parse(tokens);
     var env = Map.init(alloc);
-    const value = E.evaluate(sexpr.value, &env);
-    std.log.debug("eval result: {s}", .{tos(value)});
-    return value;
+    var ret = nil();
+    for (sexprs) |expr| ret = E.evaluate(expr, &env);
+    std.log.debug("eval result: {s}", .{tos(ret)});
+    return ret;
 }
 
-fn parse(code: []const u8) *const Value {
+fn parse(code: []const u8) []*const Value {
     const tokens = T.tokenize(code);
-    const sexpr = P.parse(tokens);
-    std.log.debug("parse result: {s}", .{tos(sexpr.value)});
-    return sexpr.value;
+    const sexprs = P.parse(tokens);
+    for (sexprs) |expr| {
+        std.log.debug("parse result: {s}", .{tos(expr)});
+    }
+    return sexprs;
 }
 
 test "tokenize" {
     const TestCase = struct {
         code: []const u8,
-        want: *const Value,
+        want: []*const Value,
     };
 
     const cases = [_]TestCase{
@@ -123,7 +126,7 @@ test "tokenize" {
             .want = parse("milk"),
         },
         TestCase{
-            .code = "(progn (setq menu '(tea coffee milk)) (cons 'juice (cdr menu))))",
+            .code = "(progn (setq menu '(tea coffee milk)) (cons 'juice (cdr menu)))",
             .want = parse("(juice coffee milk)"),
         },
         TestCase{
@@ -196,7 +199,7 @@ test "tokenize" {
         },
         TestCase{
             .code = @embedFile("examples/mergesort.lisp"),
-            .want = parse("(1 1 2 3 4 5 5 6 9)"),
+            .want = parse("(1 1 2 3 3 4 5 5 5 6 7 8 9 9 9)"),
         },
     };
 
@@ -205,7 +208,7 @@ test "tokenize" {
         const code = c.code;
         std.log.debug("test {}: {s}", .{ i, code });
         const get = eval(code);
-        try std.testing.expect(E.deepEql(get, c.want));
+        try std.testing.expect(E.deepEql(get, c.want[c.want.len - 1]));
         std.log.info("test result: ok", .{});
     }
 }

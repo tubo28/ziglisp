@@ -7,7 +7,19 @@ const common = @import("common.zig");
 const Value = common.Value;
 const nil = common.nil;
 
-pub const ParseResult = struct {
+// parse returns list of s-expr.
+pub fn parse(tokens: []const Token) []*const Value {
+    var ret = std.ArrayList(*const Value).init(common.alloc);
+    var rest = tokens;
+    while (rest.len != 0) {
+        const result = parseSExpr(rest);
+        ret.append(result.value) catch unreachable;
+        rest = result.rest;
+    }
+    return ret.toOwnedSlice() catch unreachable;
+}
+
+const ParseResult = struct {
     value: *const Value,
     rest: []const Token,
 };
@@ -16,7 +28,7 @@ pub const ParseResult = struct {
 /// <sexpr>  ::= <atom>
 ///            | '(' <sexpr>* ')'
 ///            | <quote> <sexpr>
-pub fn parse(tokens: []const Token) ParseResult {
+fn parseSExpr(tokens: []const Token) ParseResult {
     if (tokens.len == 0)
         @panic("no tokens");
 
@@ -31,7 +43,7 @@ pub fn parse(tokens: []const Token) ParseResult {
         },
         Token.quote => {
             // <quote> <sexpr> => (quote <sexpr>)
-            const listResult = parse(tail);
+            const listResult = parseSExpr(tail);
             const quote = common.newSymbolValue("quote");
             return ParseResult{
                 .value = common.newConsValue(quote, common.newConsValue(listResult.value, nil())),
@@ -60,7 +72,7 @@ fn parseList(tokens: []const Token) ParseResult {
         Token.right => return ParseResult{ .value = nil(), .rest = tokens },
         else => {
             // Parse first S-expr
-            const car = parse(tokens);
+            const car = parseSExpr(tokens);
             // Parse following S-exprs
             const cdr = parseList(car.rest);
             // Meld the results of them
