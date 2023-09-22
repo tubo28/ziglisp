@@ -26,6 +26,12 @@ pub fn tokenize(code: []const u8) []const Token {
             continue;
         }
 
+        if (code[i] == ';') {
+            i += 1;
+            while (i < code.len and code[i] != '\n') i += 1;
+            continue;
+        }
+
         if (code[i] == '(') {
             toks.append(Token{ .left = {} }) catch unreachable;
             i += 1;
