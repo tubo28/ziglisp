@@ -2,6 +2,8 @@
 
 A yet another Lisp interpreter written in Zig.
 
+Disclaimer: the author write this for his own lerning Zig purposes, so the quality is just that.
+
 ## Usage
 
 * `zig run src/main.zig` to start REPL.
