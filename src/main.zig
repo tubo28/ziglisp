@@ -201,6 +201,10 @@ test "tokenize" {
             .code = @embedFile("examples/mergesort.lisp"),
             .want = parse("(1 1 2 3 3 4 5 5 5 6 7 8 9 9 9)"),
         },
+        TestCase{
+            .code = @embedFile("examples/tarai.lisp"),
+            .want = parse("8"),
+        },
     };
 
     std.testing.log_level = std.log.Level.debug;
