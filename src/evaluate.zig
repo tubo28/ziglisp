@@ -21,61 +21,60 @@ pub fn evaluate(x: *const Value, env: *Map) *const Value {
             return x;
         },
         Value.cons => {
-            const car = _car(x);
-            switch (car.*) {
+            switch (x.cons.car.*) {
                 Value.number => @panic("number cannot be a function"),
                 Value.cons => @panic("cons cell cannot be a function"),
                 Value.function => @panic("unimplemented"),
                 Value.symbol => |sym| {
                     const eql = std.mem.eql;
 
-                    // Special forms
-                    // TODO: Rewrite some of below with macro. They are macro (not special form) in many LISP dialects.
+                    // Special forms.
+                    // TODO: Rewrite some of below by macro.
                     {
-                        const args = toSlice(_cdr(x));
+                        const args = toSlice(cdr(x));
                         if (eql(u8, sym, "quote"))
                             return args[0];
                         if (eql(u8, sym, "progn"))
-                            return progn(_cdr(x), env);
+                            return progn(cdr(x), env);
                         if (eql(u8, sym, "setq"))
-                            return setq(_cdr(x), env);
+                            return setq(cdr(x), env);
                         if (eql(u8, sym, "defun"))
                             return defun(args[0], args[1], args[2], env);
                         if (eql(u8, sym, "if"))
-                            return _if(args[0], args[1], if (args.len >= 3) args[2] else null, env);
+                            return if_(args[0], args[1], if (args.len >= 3) args[2] else null, env);
                     }
 
-                    // User-defined functions
+                    // User-defined functions.
                     if (env.get(sym)) |func| {
                         const f = func.function;
-                        const args = toEvaledSlice(_cdr(x), env);
+                        const args = toEvaledSlice(cdr(x), env);
                         return call(f, args);
                     }
 
-                    // Built-in functions
+                    // Built-in functions.
                     // TODO: Move some of them to another file and read it with @embedFile
                     {
-                        const args = toEvaledSlice(_cdr(x), env);
+                        const args = toEvaledSlice(cdr(x), env);
                         if (eql(u8, sym, "car"))
-                            return _car(args[0]);
+                            return car(args[0]);
                         if (eql(u8, sym, "cdr"))
-                            return _cdr(args[0]);
+                            return cdr(args[0]);
                         if (eql(u8, sym, "cons"))
                             return _cons(args[0], args[1]);
                         if (eql(u8, sym, "print"))
-                            return _print(args[0]);
+                            return print(args[0]);
                         if (eql(u8, sym, "+"))
-                            return _add(args);
+                            return add(args);
                         if (eql(u8, sym, "-"))
-                            return _sub(args);
+                            return sub(args);
                         if (eql(u8, sym, "eq"))
-                            return _eq(args[0], args[1]);
+                            return eq(args[0], args[1]);
                         if (eql(u8, sym, "or"))
-                            return _or(args);
+                            return or_(args);
                         if (eql(u8, sym, "and"))
-                            return _and(args);
+                            return and_(args);
                         if (eql(u8, sym, "length"))
-                            return _length(args[0]);
+                            return length(args[0]);
                     }
 
                     std.log.err("function or special form not defined: {s}\n", .{sym});
@@ -94,21 +93,21 @@ fn call(func: *const Function, args: []*const Value) *const Value {
         @panic("wrong number of arguments");
     }
 
-    var newEnv = func.env.clone() catch unreachable;
+    var new_env = func.env.clone() catch unreachable;
     for (func.params, args) |param, arg|
-        newEnv.put(param, arg) catch unreachable; // overwrite if entry exist
+        new_env.put(param, arg) catch unreachable; // overwrite if entry exist
 
-    return evaluate(func.body, &newEnv);
+    return evaluate(func.body, &new_env);
 }
 
-// Convert list like (foo bar buz) to slice
+// Convert sequence of cons cell like (foo bar buz) to slice.
 fn toSlice(head: *const Value) []*const Value {
     var ret = std.ArrayList(*const Value).init(alloc); // defer deinit?
     var h = head;
     while (h != nil()) {
-        const x = _car(h);
+        const x = car(h);
         ret.append(x) catch @panic("cannot append");
-        h = _cdr(h);
+        h = cdr(h);
     }
     return ret.toOwnedSlice() catch unreachable;
 }
@@ -120,7 +119,7 @@ fn toEvaledSlice(head: *const Value, env: *Map) []*const Value {
 }
 
 // special form
-fn _if(cond: *const Value, then: *const Value, unless: ?*const Value, env: *Map) *const Value {
+fn if_(cond: *const Value, then: *const Value, unless: ?*const Value, env: *Map) *const Value {
     if (toBool(evaluate(cond, env))) return evaluate(then, env);
     if (unless) |f| return evaluate(f, env);
     return nil();
@@ -139,32 +138,32 @@ fn isNil(x: *const Value) bool {
 }
 
 // special form
-// scope is lexical i.e. 'env' is the snapshot of parse's env
-// TODO: defun can be rewritten using lambda and macro
+// The scope is lexical, i.e., the 'env' of returned value is a snapshot of the parser's env.
+// TODO: Defun can be rewritten using lambda and macro.
 fn defun(name: *const Value, params: *const Value, body: *const Value, env: *Map) *const Value {
     // defunをパースするとき -> その時のenvを渡し、functionオブジェクトで持つ
     // defunを呼ぶとき -> その時のenvを渡さず、functionオブジェクトが持っているenvを使う
-    var paramSymbols = std.ArrayList([]const u8).init(alloc);
+    var sym_params = std.ArrayList([]const u8).init(alloc);
     {
         var tmp = toSlice(params);
-        for (tmp) |a| paramSymbols.append(_symbolp(a).?) catch unreachable;
+        for (tmp) |a| sym_params.append(symbolp(a).?) catch unreachable;
     }
-    const nameSymbol = _symbolp(name).?;
-    const func = common.newFuncValue(
-        nameSymbol,
-        paramSymbols.toOwnedSlice() catch unreachable,
+    const sym_name = symbolp(name).?;
+    const func = common.newFunctionValue(
+        sym_name,
+        sym_params.toOwnedSlice() catch unreachable,
         body,
         env,
     );
-    env.put(nameSymbol, func) catch unreachable;
+    env.put(sym_name, func) catch unreachable;
     return func;
 }
 
 // special form
 fn setq(x: *const Value, env: *Map) *const Value {
     if (isNil(x)) return nil(); // TODO: use toSlice
-    const sym = _symbolp(_car(x)).?;
-    const val = evaluate(_car(_cdr(x)), env);
+    const sym = symbolp(car(x)).?;
+    const val = evaluate(car(cdr(x)), env);
     env.put(sym, val) catch unreachable;
     return val;
 }
@@ -178,22 +177,22 @@ fn progn(x: *const Value, env: *Map) *const Value {
 }
 
 // built-in func
-fn _car(cons: *const Value) *const Value {
-    return cons.cons.car;
+fn car(x: *const Value) *const Value {
+    return x.cons.car;
 }
 
 // built-in func
-fn _cdr(cons: *const Value) *const Value {
-    return cons.cons.cdr;
+fn cdr(x: *const Value) *const Value {
+    return x.cons.cdr;
 }
 
 // built-in func
-fn _cons(car: *const Value, cdr: *const Value) *const Value {
-    return common.newConsValue(car, cdr);
+fn _cons(car_: *const Value, cdr_: *const Value) *const Value {
+    return common.newConsValue(car_, cdr_);
 }
 
 // built-in func
-fn _atomp(cons: *const Value) ?*const Value {
+fn atomp(cons: *const Value) ?*const Value {
     switch (cons.*) {
         Value.cons => return null,
         else => return cons,
@@ -201,7 +200,7 @@ fn _atomp(cons: *const Value) ?*const Value {
 }
 
 // built-in func
-fn _numberp(atom: *const Value) ?i64 {
+fn numberp(atom: *const Value) ?i64 {
     switch (atom.*) {
         Value.number => |num| return num,
         else => return null,
@@ -209,7 +208,7 @@ fn _numberp(atom: *const Value) ?i64 {
 }
 
 // built-in func
-fn _symbolp(atom: *const Value) ?[]const u8 {
+fn symbolp(atom: *const Value) ?[]const u8 {
     switch (atom.*) {
         Value.symbol => |sym| return sym,
         else => return null,
@@ -217,71 +216,73 @@ fn _symbolp(atom: *const Value) ?[]const u8 {
 }
 
 // built-in func
-fn _add(xs: []*const Value) *const Value {
+fn add(xs: []*const Value) *const Value {
     var ret: i64 = 0;
-    for (xs) |x| ret += _numberp(x).?;
+    for (xs) |x| ret += numberp(x).?;
     return common.newNumberValue(ret);
 }
 
 // built-in func
-fn _sub(xs: []*const Value) *const Value {
+fn sub(xs: []*const Value) *const Value {
     var ret: i64 = 0;
     for (xs, 0..) |x, i| {
-        if (i == 0) ret += _numberp(x).? else ret -= _numberp(x).?;
+        if (i == 0) ret += numberp(x).? else ret -= numberp(x).?;
     }
     return common.newNumberValue(ret);
 }
 
 // built-in func
-fn _or(xs: []*const Value) *const Value {
+fn or_(xs: []*const Value) *const Value {
     for (xs) |x| if (toBool(x)) return t();
     return nil();
 }
 
 // built-in func
-fn _and(xs: []*const Value) *const Value {
+fn and_(xs: []*const Value) *const Value {
     for (xs) |x| if (!toBool(x)) return nil();
     return t();
 }
 
 // built-in func
-fn _eq(x: *const Value, y: *const Value) *const Value {
-    if (boolEq(x, y)) return t();
+fn eq(x: *const Value, y: *const Value) *const Value {
+    if (deepEql(x, y)) return t();
     return nil();
 }
 
-pub fn boolEq(x: *const Value, y: *const Value) bool {
-    if (x == nil() or y == nil()) return x == y;
-    switch (x.*) {
-        Value.number => |xx| switch (y.*) {
-            Value.number => |yy| return xx == yy,
-            else => return false,
-        },
-        Value.symbol => |xx| switch (y.*) {
-            Value.symbol => |yy| return std.mem.eql(u8, xx, yy),
-            else => return false,
-        },
-        Value.cons => |xx| switch (y.*) {
-            Value.cons => |yy| return boolEq(xx.car, yy.car) and boolEq(xx.cdr, yy.cdr),
-            else => return false,
-        },
-        Value.function => |xx| switch (y.*) {
-            Value.function => |yy| return std.mem.eql(u8, xx.name, yy.name), // equality based on name
-            else => return false,
-        },
-    }
-}
-
 // built-in func
-fn _length(x: *const Value) *const Value {
+fn length(x: *const Value) *const Value {
     const slice = toSlice(x);
     return common.newNumberValue(@intCast(slice.len));
 }
 
 // built-in func
-fn _print(x: *const Value) *const Value {
+fn print(x: *const Value) *const Value {
     const str = common.toStringDot(x);
     const stdout = std.io.getStdOut().writer();
     nosuspend stdout.print("#print: {s}\n", .{str}) catch unreachable;
     return x;
+}
+
+/// The "deep equal" function for values.
+/// Equality of function values are only based on the names.
+pub fn deepEql(x: *const Value, y: *const Value) bool {
+    if (x == nil() or y == nil()) return x == y;
+    switch (x.*) {
+        Value.number => |x_| switch (y.*) {
+            Value.number => |y_| return x_ == y_,
+            else => return false,
+        },
+        Value.symbol => |x_| switch (y.*) {
+            Value.symbol => |y_| return std.mem.eql(u8, x_, y_),
+            else => return false,
+        },
+        Value.cons => |x_| switch (y.*) {
+            Value.cons => |y_| return deepEql(x_.car, y_.car) and deepEql(x_.cdr, y_.cdr),
+            else => return false,
+        },
+        Value.function => |x_| switch (y.*) {
+            Value.function => |y_| return std.mem.eql(u8, x_.name, y_.name), // just comparing name
+            else => return false,
+        },
+    }
 }

@@ -62,7 +62,7 @@ pub fn tokenize(code: []const u8) []const Token {
             continue;
         }
 
-        // All other chars are parts of as symbol
+        // All other chars are parts of as symbol.
         {
             var begin = i;
             while (i < code.len and isSymbolChar(code[i]))
@@ -76,8 +76,6 @@ pub fn tokenize(code: []const u8) []const Token {
             toks.append(Token{ .symbol = sym }) catch unreachable;
             continue;
         }
-
-        @panic("failed to tokenize");
     }
     return toks.items;
 }

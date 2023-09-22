@@ -9,10 +9,10 @@ pub fn main() !void {
     }
 }
 
-var lineBuffer: [100]u8 = undefined;
+var buffer: [100]u8 = undefined;
 
 fn readLine(reader: anytype) !?[]const u8 {
-    var fbs = std.io.fixedBufferStream(&lineBuffer);
+    var fbs = std.io.fixedBufferStream(&buffer);
     try reader.streamUntilDelimiter(fbs.writer(), '\n', null);
     return fbs.getWritten();
 }

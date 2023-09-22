@@ -12,19 +12,16 @@ pub const ParseResult = struct {
     rest: []const Token,
 };
 
-/// Parse s-expression based on following BFN
+/// Parse s-expression based on BFN below.
 /// <sexpr>  ::= <atom>
 ///            | '(' <sexpr>* ')'
 ///            | <quote> <sexpr>
 pub fn parse(tokens: []const Token) ParseResult {
-    if (tokens.len == 0) {
-        // Should panic?
+    if (tokens.len == 0)
         @panic("no tokens");
-    }
 
     const head = tokens[0];
     const tail = tokens[1..];
-
     switch (head) {
         Token.left => {
             assert(tail.len != 0);
@@ -54,12 +51,10 @@ pub fn parse(tokens: []const Token) ParseResult {
     }
 }
 
-// Parse s-expression based on following BFN
+// Parse sequence of s-expression based on BFN below.
 // <S-expr>*
 fn parseList(tokens: []const Token) ParseResult {
-    if (tokens.len == 0) {
-        return ParseResult{ .value = nil(), .rest = tokens };
-    }
+    if (tokens.len == 0) return ParseResult{ .value = nil(), .rest = tokens };
 
     switch (tokens[0]) {
         Token.right => return ParseResult{ .value = nil(), .rest = tokens },

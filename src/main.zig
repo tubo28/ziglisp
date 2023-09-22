@@ -191,7 +191,7 @@ test "tokenize" {
         const code = c.code;
         std.log.debug("test {}: {s}", .{ i, code });
         const get = eval(code);
-        try std.testing.expect(E.boolEq(get, c.want));
+        try std.testing.expect(E.deepEql(get, c.want));
         std.log.info("test result: ok", .{});
     }
 }

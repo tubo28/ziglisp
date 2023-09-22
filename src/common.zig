@@ -4,7 +4,7 @@ pub const Map = std.StringHashMap(*const Value);
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 pub const alloc = gpa.allocator();
 
-const Cons = struct {
+pub const Cons = struct {
     car: *const Value,
     cdr: *const Value,
 };
@@ -15,8 +15,6 @@ pub fn newCons(car: *const Value, cdr: *const Value) *Cons {
     return cons;
 }
 
-/// Node of tree.
-/// It is a branch only if cons, otherwise leaf
 const ValueTag = enum {
     number,
     symbol,
@@ -24,6 +22,8 @@ const ValueTag = enum {
     function,
 };
 
+/// Node of tree.
+/// It is a branch only if cons, otherwise leaf.
 pub const Value = union(ValueTag) {
     number: i64,
     symbol: []const u8,
@@ -55,7 +55,12 @@ fn newAtomValue(comptime T: type, value: T) *Value {
     return ret;
 }
 
-pub fn newFuncValue(name: []const u8, params: [][]const u8, body: *const Value, env: *const Map) *Value {
+pub fn newFunctionValue(
+    name: []const u8,
+    params: [][]const u8,
+    body: *const Value,
+    env: *const Map,
+) *Value {
     var ret: *Value = alloc.create(Value) catch unreachable;
     ret.* = Value{ .function = newFunc(name, params, body, env) };
     return ret;
@@ -65,7 +70,7 @@ pub const Function = struct {
     name: []const u8,
     params: [][]const u8,
     body: *const Value,
-    env: *const Map, // captured env. scope?
+    env: *const Map, // captured env (lexical scope)
 };
 
 pub fn newFunc(name: []const u8, params: [][]const u8, body: *const Value, env: *const Map) *Function {
@@ -79,30 +84,31 @@ pub fn newFunc(name: []const u8, params: [][]const u8, body: *const Value, env: 
     return ret;
 }
 
-var _nil: ?*Value = null;
-var _t: ?*Value = null;
+var nil_opt: ?*Value = null;
+var t_opt: ?*Value = null;
 
 /// nil is a ConsCell such that both its car and cdr are itself.
 pub fn nil() *const Value {
-    if (_nil) |n| return n;
+    if (nil_opt) |n| return n;
 
-    var n: *Value = alloc.create(Value) catch @panic("errro");
-    n.* = Value{ .cons = newCons(n, n) };
-    _nil = n;
-    return _nil.?;
+    var n: *Value = newConsValue(undefined, undefined);
+    n.cons.car = n;
+    n.cons.cdr = n;
+    nil_opt = n;
+    return nil_opt.?;
 }
 
 pub fn t() *const Value {
-    if (_t) |tt| return tt;
-    _t = newSymbolValue("t");
-    return _t.?;
+    if (t_opt) |tt| return tt;
+    t_opt = newSymbolValue("t");
+    return t_opt.?;
 }
 
 pub fn toStringDot(cell: *const Value) []const u8 {
-    var builder = std.ArrayList(u8).init(alloc);
-    defer builder.deinit();
-    toStringDotInner(cell, &builder);
-    return builder.toOwnedSlice() catch unreachable;
+    var buf = std.ArrayList(u8).init(alloc);
+    defer buf.deinit();
+    toStringDotInner(cell, &buf);
+    return buf.toOwnedSlice() catch unreachable;
 }
 
 fn toStringDotInner(cell: *const Value, builder: *std.ArrayList(u8)) void {
@@ -120,7 +126,11 @@ fn toStringDotInner(cell: *const Value, builder: *std.ArrayList(u8)) void {
         },
         Value.number => |num| {
             var buffer: [30]u8 = undefined;
-            const str = std.fmt.bufPrint(buffer[0..], "{}", .{num}) catch @panic("too large integer");
+            const str = std.fmt.bufPrint(
+                buffer[0..],
+                "{}",
+                .{num},
+            ) catch @panic("too large integer");
             builder.appendSlice(str) catch unreachable;
         },
         Value.symbol => |sym| builder.appendSlice(sym) catch unreachable,
