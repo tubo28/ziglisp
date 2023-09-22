@@ -2,16 +2,7 @@ const std = @import("std");
 const common = @import("common.zig");
 const alloc = common.alloc;
 
-const TokenTag = enum {
-    int,
-    symbol,
-    left,
-    right,
-    quote,
-    nil,
-};
-
-pub const Token = union(TokenTag) {
+pub const Token = union(enum) {
     int: i64,
     symbol: []const u8,
     left, // (

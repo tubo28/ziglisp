@@ -15,16 +15,9 @@ pub fn newCons(car: *const Value, cdr: *const Value) *Cons {
     return cons;
 }
 
-const ValueTag = enum {
-    number,
-    symbol,
-    cons,
-    function,
-};
-
 /// Node of tree.
 /// It is a branch only if cons, otherwise leaf.
-pub const Value = union(ValueTag) {
+pub const Value = union(enum) {
     number: i64,
     symbol: []const u8,
     cons: *Cons,

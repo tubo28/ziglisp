@@ -53,7 +53,7 @@ pub fn evaluate(x: *const Value, env: *Map) *const Value {
                     if (env.get(sym)) |func| {
                         const f = func.function;
                         const args = toEvaledSlice(cdr(x), env);
-                        return call(f, args);
+                        return callFunction(f, args);
                     }
 
                     // Built-in functions.
@@ -130,7 +130,7 @@ pub fn evaluate(x: *const Value, env: *Map) *const Value {
     }
 }
 
-fn call(func: *const Function, args: []*const Value) *const Value {
+fn callFunction(func: *const Function, args: []*const Value) *const Value {
     // defunをパースするとき -> その時のenvを渡し、functionオブジェクトで持つ
     // defunを呼ぶとき -> その時のenvを渡さず、functionオブジェクトが持っているenvを使う ただし引数だけ追加（上書き）する
     if (func.params.len != args.len) {
@@ -352,28 +352,28 @@ fn eq(x: *const Value, y: *const Value) *const Value {
     return nil();
 }
 
-fn toSymbol(x: bool) *const Value {
+fn boolAsSymbol(x: bool) *const Value {
     return if (x) t() else nil();
 }
 
 // built-in func
 fn le(x: *const Value, y: *const Value) *const Value {
-    return toSymbol(x.number < y.number);
+    return boolAsSymbol(x.number < y.number);
 }
 
 // built-in func
 fn leq(x: *const Value, y: *const Value) *const Value {
-    return toSymbol(x.number <= y.number);
+    return boolAsSymbol(x.number <= y.number);
 }
 
 // built-in func
 fn ge(x: *const Value, y: *const Value) *const Value {
-    return toSymbol(x.number > y.number);
+    return boolAsSymbol(x.number > y.number);
 }
 
 // built-in func
 fn geq(x: *const Value, y: *const Value) *const Value {
-    return toSymbol(x.number > y.number);
+    return boolAsSymbol(x.number > y.number);
 }
 
 // built-in func
@@ -384,7 +384,7 @@ fn length(x: *const Value) *const Value {
 
 // built-in func
 fn null_(x: *const Value) *const Value {
-    return toSymbol(isNil(x));
+    return boolAsSymbol(isNil(x));
 }
 
 // built-in func
