@@ -183,16 +183,20 @@ test "tokenize" {
             .want = parse("3"),
         },
         TestCase{
-            .code = "(cond ((eq 0 1) 'foo) ((eq 0 0) 'bar))",
+            .code = "(cond ((= 0 1) 'foo) ((= 0 0) 'bar))",
             .want = parse("bar"),
         },
         TestCase{
-            .code = "(cond ((eq 0 1) 'foo) (t 'bar))",
+            .code = "(cond ((= 0 1) 'foo) (t 'bar))",
             .want = parse("bar"),
         },
         TestCase{
-            .code = "(cond ((eq 0 1) 'foo) ((eq 0 2) 'bar))",
+            .code = "(cond ((= 0 1) 'foo) ((= 0 2) 'bar))",
             .want = parse("nil"),
+        },
+        TestCase{
+            .code = @embedFile("examples/mergesort.lisp"),
+            .want = parse("(1 1 2 3 4 5 5 6 9)"),
         },
     };
 

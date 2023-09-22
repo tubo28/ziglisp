@@ -40,7 +40,7 @@ pub fn evaluate(x: *const Value, env: *Map) *const Value {
                         if (eql(u8, sym, "setq"))
                             return setq(cdr(x), env);
                         if (eql(u8, sym, "defun"))
-                            return defun(args[0], args[1], args[2], env);
+                            return defun(args[0], args[1], args[2..], env);
                         if (eql(u8, sym, "if"))
                             return if_(args[0], args[1], if (args.len >= 3) args[2] else null, env);
                         if (eql(u8, sym, "cond"))
@@ -63,13 +63,21 @@ pub fn evaluate(x: *const Value, env: *Map) *const Value {
                             "car",
                             "cdr",
                             "cons",
+                            "list",
                             "print",
                             "+",
                             "-",
-                            "eq",
+                            "*",
+                            "/",
+                            "=",
+                            "<",
+                            "<=",
+                            ">",
+                            ">=",
                             "or",
                             "and",
                             "length",
+                            "null",
                         };
                         var found = false;
                         for (names) |n| found = found or eql(u8, sym, n);
@@ -81,21 +89,37 @@ pub fn evaluate(x: *const Value, env: *Map) *const Value {
                         if (eql(u8, sym, "cdr"))
                             return cdr(args[0]);
                         if (eql(u8, sym, "cons"))
-                            return _cons(args[0], args[1]);
+                            return cons_(args[0], args[1]);
+                        if (eql(u8, sym, "list"))
+                            return list(args);
                         if (eql(u8, sym, "print"))
                             return print(args[0]);
                         if (eql(u8, sym, "+"))
                             return add(args);
                         if (eql(u8, sym, "-"))
                             return sub(args);
-                        if (eql(u8, sym, "eq"))
+                        if (eql(u8, sym, "*"))
+                            return mul(args);
+                        if (eql(u8, sym, "/"))
+                            return div(args);
+                        if (eql(u8, sym, "="))
                             return eq(args[0], args[1]);
+                        if (eql(u8, sym, "<"))
+                            return le(args[0], args[1]);
+                        if (eql(u8, sym, "<="))
+                            return leq(args[0], args[1]);
+                        if (eql(u8, sym, ">"))
+                            return ge(args[0], args[1]);
+                        if (eql(u8, sym, ">="))
+                            return geq(args[0], args[1]);
                         if (eql(u8, sym, "or"))
                             return or_(args);
                         if (eql(u8, sym, "and"))
                             return and_(args);
                         if (eql(u8, sym, "length"))
                             return length(args[0]);
+                        if (eql(u8, sym, "null"))
+                            return null_(args[0]);
                     }
 
                     std.log.err("function or special form not defined: {s}\n", .{sym});
@@ -118,7 +142,9 @@ fn call(func: *const Function, args: []*const Value) *const Value {
     for (func.params, args) |param, arg|
         new_env.put(param, arg) catch unreachable; // overwrite if entry exist
 
-    return evaluate(func.body, &new_env);
+    var ret = nil();
+    for (func.body) |expr| ret = evaluate(expr, &new_env);
+    return ret;
 }
 
 // Convert sequence of cons cell like (foo bar buz) to slice.
@@ -162,6 +188,7 @@ fn toBool(x: *const Value) bool {
     return !isNil(x);
 }
 
+// TODO: rename this to null_
 fn isNil(x: *const Value) bool {
     if (x == nil()) return true;
     switch (x.*) {
@@ -187,7 +214,7 @@ fn let(vals: *const Value, expr: *const Value, env: *Map) *const Value {
 // special form
 // The scope is lexical, i.e., the 'env' of returned value is a snapshot of the parser's env.
 // TODO: Defun can be rewritten using lambda and macro.
-fn defun(name: *const Value, params: *const Value, body: *const Value, env: *Map) *const Value {
+fn defun(name: *const Value, params: *const Value, body: []*const Value, env: *Map) *const Value {
     // defunをパースするとき -> その時のenvを渡し、functionオブジェクトで持つ
     // defunを呼ぶとき -> その時のenvを渡さず、functionオブジェクトが持っているenvを使う
     var sym_params = std.ArrayList([]const u8).init(alloc);
@@ -234,8 +261,19 @@ fn cdr(x: *const Value) *const Value {
 }
 
 // built-in func
-fn _cons(car_: *const Value, cdr_: *const Value) *const Value {
+fn cons_(car_: *const Value, cdr_: *const Value) *const Value {
     return common.newConsValue(car_, cdr_);
+}
+
+// built-in func
+fn list(xs: []*const Value) *const Value {
+    var ret = nil();
+    var i = xs.len;
+    while (i > 0) {
+        i -= 1;
+        ret = common.newConsValue(xs[i], ret);
+    }
+    return ret;
 }
 
 // built-in func
@@ -279,6 +317,24 @@ fn sub(xs: []*const Value) *const Value {
 }
 
 // built-in func
+fn mul(xs: []*const Value) *const Value {
+    var ret: i64 = 1;
+    for (xs, 0..) |x, i| {
+        if (i == 0) ret *= numberp(x).?;
+    }
+    return common.newNumberValue(ret);
+}
+
+// built-in func
+fn div(xs: []*const Value) *const Value {
+    var ret: i64 = 1;
+    for (xs, 0..) |x, i| {
+        if (i == 0) ret *= numberp(x).? else ret = @divFloor(ret, numberp(x).?);
+    }
+    return common.newNumberValue(ret);
+}
+
+// built-in func
 fn or_(xs: []*const Value) *const Value {
     for (xs) |x| if (toBool(x)) return t();
     return nil();
@@ -296,10 +352,39 @@ fn eq(x: *const Value, y: *const Value) *const Value {
     return nil();
 }
 
+fn toSymbol(x: bool) *const Value {
+    return if (x) t() else nil();
+}
+
+// built-in func
+fn le(x: *const Value, y: *const Value) *const Value {
+    return toSymbol(x.number < y.number);
+}
+
+// built-in func
+fn leq(x: *const Value, y: *const Value) *const Value {
+    return toSymbol(x.number <= y.number);
+}
+
+// built-in func
+fn ge(x: *const Value, y: *const Value) *const Value {
+    return toSymbol(x.number > y.number);
+}
+
+// built-in func
+fn geq(x: *const Value, y: *const Value) *const Value {
+    return toSymbol(x.number > y.number);
+}
+
 // built-in func
 fn length(x: *const Value) *const Value {
     const slice = toSlice(x);
     return common.newNumberValue(@intCast(slice.len));
+}
+
+// built-in func
+fn null_(x: *const Value) *const Value {
+    return toSymbol(isNil(x));
 }
 
 // built-in func

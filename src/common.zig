@@ -58,7 +58,7 @@ fn newAtomValue(comptime T: type, value: T) *Value {
 pub fn newFunctionValue(
     name: []const u8,
     params: [][]const u8,
-    body: *const Value,
+    body: []*const Value,
     env: *const Map,
 ) *Value {
     var ret: *Value = alloc.create(Value) catch unreachable;
@@ -69,11 +69,11 @@ pub fn newFunctionValue(
 pub const Function = struct {
     name: []const u8,
     params: [][]const u8,
-    body: *const Value,
+    body: []*const Value,
     env: *const Map, // captured env (lexical scope)
 };
 
-pub fn newFunc(name: []const u8, params: [][]const u8, body: *const Value, env: *const Map) *Function {
+pub fn newFunc(name: []const u8, params: [][]const u8, body: []*const Value, env: *const Map) *Function {
     var ret: *Function = alloc.create(Function) catch unreachable;
     ret.* = Function{
         .name = name,
