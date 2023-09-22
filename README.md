@@ -4,9 +4,10 @@ A yet another Lisp interpreter written in Zig.
 
 ## Usage
 
-`zig run src/main.zig` to start REPL.
+* `zig run src/main.zig` to start REPL.
+* `zig run src/main.zig -- src/examples/mergesort.lisp` to evaluate file.
 
-It's tested under Zig version `0.12.0-dev.278+0e8f130ae`.
+Tested under Zig version `0.12.0-dev.278+0e8f130ae`.
 
 ```
 $ zig run src/main.zig

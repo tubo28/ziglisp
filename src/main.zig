@@ -12,6 +12,31 @@ const P = @import("parse.zig");
 const E = @import("evaluate.zig");
 
 pub fn main() !void {
+    const args = try std.process.argsAlloc(common.alloc);
+    if (args.len == 2) {
+        try evalFile(args[1]);
+        return;
+    }
+    try repl();
+}
+
+fn evalFile(filepath: []const u8) !void {
+    const stdout = std.io.getStdOut().writer();
+
+    var file = try std.fs.cwd().openFile(filepath, .{});
+    defer file.close();
+
+    var buf_reader = std.io.bufferedReader(file.reader());
+    var in_stream = buf_reader.reader();
+
+    var env = Map.init(alloc);
+    var buf: [65536]u8 = undefined;
+    const size = try in_stream.readAll(&buf);
+    const result = eval(buf[0..size], &env);
+    try stdout.print("{s}\n", .{tos(result)});
+}
+
+fn repl() !void {
     const stdin = std.io.getStdIn().reader();
     const stdout = std.io.getStdOut().writer();
 
