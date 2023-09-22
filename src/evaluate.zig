@@ -13,16 +13,14 @@ const Token = @import("tokenize.zig").Token;
 
 // TODO: should env be const? Should evaluate return modified env?
 pub fn evaluate(x: *const Value, env: *Map) *const Value {
-    //     std.log.debug("evaluate arg: {s}", .{tos(x)});
     if (isNil(x)) return x;
     switch (x.*) {
         Value.number, Value.function => return x,
         Value.symbol => |sym| {
-            if (env.get(sym)) |ent| return ent;
-            return x;
+            return if (env.get(sym)) |ent| ent else x;
         },
-        Value.cons => {
-            switch (x.cons.car.*) {
+        Value.cons => |cons| {
+            switch (cons.car.*) {
                 Value.number => @panic("number cannot be a function"),
                 Value.cons => @panic("cons cell cannot be a function"),
                 Value.function => @panic("unimplemented"),
@@ -58,30 +56,13 @@ pub fn evaluate(x: *const Value, env: *Map) *const Value {
 
                     // Built-in functions.
                     // TODO: Move some of them to another file and read it with @embedFile
-                    blk: {
-                        const names = [_][]const u8{
-                            "car",
-                            "cdr",
-                            "cons",
-                            "list",
-                            "print",
-                            "+",
-                            "-",
-                            "*",
-                            "/",
-                            "=",
-                            "<",
-                            "<=",
-                            ">",
-                            ">=",
-                            "or",
-                            "and",
-                            "length",
-                            "null",
-                        };
+                    builtin: {
+                        // Traverse the list of built-in functions to check the existence of function
+                        // in order not to call toEvaledSlice meaninglessly.
+                        const names = [_][]const u8{ "car", "cdr", "cons", "list", "print", "+", "-", "*", "/", "=", "<", "<=", ">", ">=", "or", "and", "length", "null" };
                         var found = false;
                         for (names) |n| found = found or eql(u8, sym, n);
-                        if (!found) break :blk;
+                        if (!found) break :builtin;
 
                         const args = toEvaledSlice(cdr(x), env);
                         if (eql(u8, sym, "car"))
@@ -131,8 +112,6 @@ pub fn evaluate(x: *const Value, env: *Map) *const Value {
 }
 
 fn callFunction(func: *const Function, args: []*const Value) *const Value {
-    // defunをパースするとき -> その時のenvを渡し、functionオブジェクトで持つ
-    // defunを呼ぶとき -> その時のenvを渡さず、functionオブジェクトが持っているenvを使う ただし引数だけ追加（上書き）する
     if (func.params.len != args.len) {
         std.log.err("wrong number of argument for {s}", .{func.name});
         @panic("wrong number of arguments");
@@ -162,6 +141,7 @@ fn toSlice(head: *const Value) []*const Value {
 fn toEvaledSlice(head: *const Value, env: *Map) []*const Value {
     var ret = toSlice(head);
     for (ret) |*x| x.* = evaluate(x.*, env);
+
     return ret;
 }
 
@@ -215,8 +195,6 @@ fn let(vals: *const Value, expr: *const Value, env: *Map) *const Value {
 // The scope is lexical, i.e., the 'env' of returned value is a snapshot of the parser's env.
 // TODO: Defun can be rewritten using lambda and macro.
 fn defun(name: *const Value, params: *const Value, body: []*const Value, env: *Map) *const Value {
-    // defunをパースするとき -> その時のenvを渡し、functionオブジェクトで持つ
-    // defunを呼ぶとき -> その時のenvを渡さず、functionオブジェクトが持っているenvを使う
     var sym_params = std.ArrayList([]const u8).init(alloc);
     {
         var tmp = toSlice(params);

@@ -11,26 +11,49 @@ const T = @import("tokenize.zig");
 const P = @import("parse.zig");
 const E = @import("evaluate.zig");
 
-pub fn main() void {
-    std.debug.print("Hello, {s}!\n", .{"World"});
+pub fn main() !void {
+    const stdin = std.io.getStdIn().reader();
+    const stdout = std.io.getStdOut().writer();
+
+    var env = Map.init(alloc);
+    while (true) {
+        try stdout.print(">>> ", .{});
+        const line = readLine(stdin) catch |err| switch (err) {
+            error.EndOfStream => break,
+            else => return err,
+        };
+        if (line) |l| {
+            if (l.len == 0) continue;
+            const result = eval(l, &env);
+            try stdout.print("{s}\n", .{tos(result)});
+        }
+    }
 }
 
-fn eval(code: []const u8) *const Value {
+fn readLine(reader: anytype) !?[]const u8 {
+    // Don't free buffer since it's referenced from slices in env entry.
+    const len = 8192;
+    var buffer: []u8 = try alloc.alloc(u8, len);
+    var fbs = std.io.fixedBufferStream(buffer);
+    try reader.streamUntilDelimiter(fbs.writer(), '\n', len);
+    return fbs.getWritten();
+}
+
+fn eval(code: []const u8, env: *Map) *const Value {
     const tokens = T.tokenize(code);
     const sexprs = P.parse(tokens);
-    var env = Map.init(alloc);
     var ret = nil();
-    for (sexprs) |expr| ret = E.evaluate(expr, &env);
-    std.log.debug("eval result: {s}", .{tos(ret)});
+    for (sexprs) |expr| ret = E.evaluate(expr, env);
+    // std.log.debug("eval result: {s}", .{tos(ret)});
     return ret;
 }
 
 fn parse(code: []const u8) []*const Value {
     const tokens = T.tokenize(code);
     const sexprs = P.parse(tokens);
-    for (sexprs) |expr| {
-        std.log.debug("parse result: {s}", .{tos(expr)});
-    }
+    // for (sexprs) |expr| {
+    //     std.log.debug("parse result: {s}", .{tos(expr)});
+    // }
     return sexprs;
 }
 
@@ -72,6 +95,10 @@ test "tokenize" {
         TestCase{
             .code = "(setq menu '(tea coffee milk))",
             .want = parse("(tea coffee milk)"),
+        },
+        TestCase{
+            .code = "(setq a 1) (+ a a)",
+            .want = parse("2"),
         },
         TestCase{
             .code = "(progn (setq a 1) (setq b 2) (+ a b 3))",
@@ -211,7 +238,9 @@ test "tokenize" {
     for (cases, 1..) |c, i| {
         const code = c.code;
         std.log.debug("test {}: {s}", .{ i, code });
-        const get = eval(code);
+        var env = Map.init(alloc);
+        defer env.deinit();
+        const get = eval(code, &env);
         try std.testing.expect(E.deepEql(get, c.want[c.want.len - 1]));
         std.log.info("test result: ok", .{});
     }
