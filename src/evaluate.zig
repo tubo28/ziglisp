@@ -11,6 +11,7 @@ const Value = common.Value;
 
 const Token = @import("tokenize.zig").Token;
 
+// TODO: should env be const? Should evaluate return modified env?
 pub fn evaluate(x: *const Value, env: *Map) *const Value {
     //     std.log.debug("evaluate arg: {s}", .{tos(x)});
     if (isNil(x)) return x;
@@ -42,6 +43,8 @@ pub fn evaluate(x: *const Value, env: *Map) *const Value {
                             return defun(args[0], args[1], args[2], env);
                         if (eql(u8, sym, "if"))
                             return if_(args[0], args[1], if (args.len >= 3) args[2] else null, env);
+                        if (eql(u8, sym, "let"))
+                            return let(args[0], args[1], env);
                     }
 
                     // User-defined functions.
@@ -54,6 +57,7 @@ pub fn evaluate(x: *const Value, env: *Map) *const Value {
                     // Built-in functions.
                     // TODO: Move some of them to another file and read it with @embedFile
                     {
+                        // TODO: Evaluate arguments after checking function exists.
                         const args = toEvaledSlice(cdr(x), env);
                         if (eql(u8, sym, "car"))
                             return car(args[0]);
@@ -135,6 +139,20 @@ fn isNil(x: *const Value) bool {
         Value.cons => |cons| if (cons.car == nil() and cons.cdr == nil()) return true else return false,
         else => return false,
     }
+}
+
+// special form
+// TODO: Make env const.
+fn let(vals: *const Value, expr: *const Value, env: *Map) *const Value {
+    const values = toSlice(vals);
+    var new_env = env.clone() catch unreachable;
+    for (values) |v| {
+        const keyVal = toSlice(v);
+        const key = keyVal[0].symbol;
+        const val = evaluate(keyVal[1], env);
+        new_env.put(key, val) catch unreachable;
+    }
+    return evaluate(expr, &new_env);
 }
 
 // special form

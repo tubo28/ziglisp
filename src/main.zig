@@ -184,6 +184,10 @@ test "tokenize" {
             ,
             .want = parse("89"),
         },
+        TestCase{
+            .code = "(let ((x 1) (y 2)) (+ 1 2))",
+            .want = parse("3"),
+        },
     };
 
     std.testing.log_level = std.log.Level.debug;
