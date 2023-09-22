@@ -43,6 +43,8 @@ pub fn evaluate(x: *const Value, env: *Map) *const Value {
                             return defun(args[0], args[1], args[2], env);
                         if (eql(u8, sym, "if"))
                             return if_(args[0], args[1], if (args.len >= 3) args[2] else null, env);
+                        if (eql(u8, sym, "cond"))
+                            return cond(args, env);
                         if (eql(u8, sym, "let"))
                             return let(args[0], args[1], env);
                     }
@@ -56,8 +58,23 @@ pub fn evaluate(x: *const Value, env: *Map) *const Value {
 
                     // Built-in functions.
                     // TODO: Move some of them to another file and read it with @embedFile
-                    {
-                        // TODO: Evaluate arguments after checking function exists.
+                    blk: {
+                        const names = [_][]const u8{
+                            "car",
+                            "cdr",
+                            "cons",
+                            "print",
+                            "+",
+                            "-",
+                            "eq",
+                            "or",
+                            "and",
+                            "length",
+                        };
+                        var found = false;
+                        for (names) |n| found = found or eql(u8, sym, n);
+                        if (!found) break :blk;
+
                         const args = toEvaledSlice(cdr(x), env);
                         if (eql(u8, sym, "car"))
                             return car(args[0]);
@@ -123,9 +140,21 @@ fn toEvaledSlice(head: *const Value, env: *Map) []*const Value {
 }
 
 // special form
-fn if_(cond: *const Value, then: *const Value, unless: ?*const Value, env: *Map) *const Value {
-    if (toBool(evaluate(cond, env))) return evaluate(then, env);
+fn if_(cond_: *const Value, then: *const Value, unless: ?*const Value, env: *Map) *const Value {
+    if (toBool(evaluate(cond_, env))) return evaluate(then, env);
     if (unless) |f| return evaluate(f, env);
+    return nil();
+}
+
+// special form
+fn cond(clauses: []*const Value, env: *Map) *const Value {
+    for (clauses) |c| {
+        const tmp = toSlice(c);
+        const cond_ = tmp[0];
+        const then = tmp[1];
+        if (toBool(evaluate(cond_, env)))
+            return evaluate(then, env);
+    }
     return nil();
 }
 

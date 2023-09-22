@@ -182,6 +182,18 @@ test "tokenize" {
             .code = "(let ((x 1) (y 2)) (+ 1 2))",
             .want = parse("3"),
         },
+        TestCase{
+            .code = "(cond ((eq 0 1) 'foo) ((eq 0 0) 'bar))",
+            .want = parse("bar"),
+        },
+        TestCase{
+            .code = "(cond ((eq 0 1) 'foo) (t 'bar))",
+            .want = parse("bar"),
+        },
+        TestCase{
+            .code = "(cond ((eq 0 1) 'foo) ((eq 0 2) 'bar))",
+            .want = parse("nil"),
+        },
     };
 
     std.testing.log_level = std.log.Level.debug;
