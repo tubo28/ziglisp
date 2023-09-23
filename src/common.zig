@@ -24,22 +24,22 @@ pub const Value = union(enum) {
     function: *Function,
 };
 
-pub fn newConsValue(car: *const Value, cdr: *const Value) *Value {
-    var ret: *Value = alloc.create(Value) catch unreachable;
+pub fn newConsValue(car: *const Value, cdr: *const Value) *const Value {
+    var ret = alloc.create(Value) catch unreachable;
     ret.* = Value{ .cons = newCons(car, cdr) };
     return ret;
 }
 
-pub fn newNumberValue(x: i64) *Value {
+pub fn newNumberValue(x: i64) *const Value {
     return newAtomValue(i64, x);
 }
 
-pub fn newSymbolValue(x: []const u8) *Value {
+pub fn newSymbolValue(x: []const u8) *const Value {
     return newAtomValue([]const u8, x);
 }
 
-fn newAtomValue(comptime T: type, value: T) *Value {
-    var ret: *Value = alloc.create(Value) catch unreachable;
+fn newAtomValue(comptime T: type, value: T) *const Value {
+    var ret = alloc.create(Value) catch unreachable;
     switch (T) {
         i64 => ret.* = Value{ .number = value },
         []const u8 => ret.* = Value{ .symbol = value },
@@ -53,8 +53,8 @@ pub fn newFunctionValue(
     params: [][]const u8,
     body: []*const Value,
     env: *const Map,
-) *Value {
-    var ret: *Value = alloc.create(Value) catch unreachable;
+) *const Value {
+    var ret = alloc.create(Value) catch unreachable;
     ret.* = Value{ .function = newFunc(name, params, body, env) };
     return ret;
 }
@@ -83,17 +83,17 @@ var t_opt: ?*Value = null;
 /// nil is a ConsCell such that both its car and cdr are itself.
 pub fn nil() *const Value {
     if (nil_opt) |n| return n;
-
-    var n: *Value = newConsValue(undefined, undefined);
-    n.cons.car = n;
-    n.cons.cdr = n;
+    var n = alloc.create(Value) catch unreachable;
+    n.* = Value{ .cons = newCons(n, n) };
     nil_opt = n;
     return nil_opt.?;
 }
 
 pub fn t() *const Value {
     if (t_opt) |tt| return tt;
-    t_opt = newSymbolValue("t");
+    var t_ = alloc.create(Value) catch unreachable;
+    t_.* = Value{ .symbol = "t" };
+    t_opt = t_;
     return t_opt.?;
 }
 
