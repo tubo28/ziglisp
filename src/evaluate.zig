@@ -6,7 +6,7 @@ const Function = common.Function;
 const Map = common.Map;
 const nil = common.nil;
 const t = common.t;
-const tos = common.toStringDot;
+const toString = common.toString;
 const Value = common.Value;
 
 const Token = @import("tokenize.zig").Token;
@@ -367,7 +367,7 @@ fn null_(x: *const Value) *const Value {
 
 // built-in func
 fn print(x: *const Value) *const Value {
-    const str = common.toStringDot(x);
+    const str = common.toString(x);
     const stdout = std.io.getStdOut().writer();
     nosuspend stdout.print("#print: {s}\n", .{str}) catch unreachable;
     return x;

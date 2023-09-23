@@ -3,7 +3,7 @@ const Map = std.StringHashMap(*const Value);
 
 const common = @import("common.zig");
 const nil = common.nil;
-const tos = common.toStringDot;
+const toString = common.toString;
 const alloc = common.alloc;
 const Value = common.Value;
 
@@ -33,7 +33,7 @@ fn evalFile(filepath: []const u8) !void {
     var buf: [65536]u8 = undefined;
     const size = try in_stream.readAll(&buf);
     const result = eval(buf[0..size], &env);
-    try stdout.print("{s}\n", .{tos(result)});
+    try stdout.print("{s}\n", .{toString(result)});
 }
 
 fn repl() !void {
@@ -50,7 +50,7 @@ fn repl() !void {
         if (line) |l| {
             if (l.len == 0) continue;
             const result = eval(l, &env);
-            try stdout.print("{s}\n", .{tos(result)});
+            try stdout.print("{s}\n", .{toString(result)});
         }
     }
 }

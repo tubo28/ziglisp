@@ -97,26 +97,20 @@ pub fn t() *const Value {
     return t_opt.?;
 }
 
-pub fn toStringDot(cell: *const Value) []const u8 {
+pub fn toString(cell: *const Value) []const u8 {
     var buf = std.ArrayList(u8).init(alloc);
     defer buf.deinit();
-    toStringDotInner(cell, &buf);
+    toStringInner(cell, &buf);
     return buf.toOwnedSlice() catch unreachable;
 }
 
-fn toStringDotInner(cell: *const Value, builder: *std.ArrayList(u8)) void {
+fn toStringInner(cell: *const Value, builder: *std.ArrayList(u8)) void {
     if (cell == nil()) {
         builder.appendSlice("nil") catch unreachable;
         return;
     }
     switch (cell.*) {
-        Value.cons => |cons| {
-            builder.appendSlice("(") catch unreachable;
-            toStringDotInner(cons.car, builder);
-            builder.appendSlice(" . ") catch unreachable;
-            toStringDotInner(cons.cdr, builder);
-            builder.appendSlice(")") catch unreachable;
-        },
+        Value.cons => consToString(cell, builder),
         Value.number => |num| {
             var buffer: [30]u8 = undefined;
             const str = std.fmt.bufPrint(
@@ -133,4 +127,41 @@ fn toStringDotInner(cell: *const Value, builder: *std.ArrayList(u8)) void {
             builder.appendSlice(">") catch unreachable;
         },
     }
+}
+
+fn consToString(x: *const Value, builder: *std.ArrayList(u8)) void {
+    switch (consOpt(x).?.cdr.*) {
+        Value.cons => {
+            // List
+            builder.append('(') catch unreachable;
+            var head = x;
+            var first = true;
+            while (head != nil()) {
+                if (consOpt(head)) |c| {
+                    if (!first) builder.append(' ') catch unreachable;
+                    first = false;
+                    toStringInner(c.car, builder);
+                    head = c.cdr;
+                } else {
+                    break;
+                }
+            }
+            builder.append(')') catch unreachable;
+        },
+        else => {
+            // Dotted pair
+            builder.append('(') catch unreachable;
+            toStringInner(x.cons.car, builder);
+            builder.appendSlice(" . ") catch unreachable;
+            toStringInner(x.cons.cdr, builder);
+            builder.append(')') catch unreachable;
+        },
+    }
+}
+
+fn consOpt(x: *const Value) ?*const Cons {
+    return switch (x.*) {
+        Value.cons => |cons| cons,
+        else => null,
+    };
 }
