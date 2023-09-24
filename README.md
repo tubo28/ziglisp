@@ -2,14 +2,14 @@
 
 A yet another Lisp interpreter written in Zig.
 
-Disclaimer: the author write this for his own lerning Zig purposes, so the quality is just that.
+Disclaimer: the author create the interpreter for his own learning Zig purposes, so the quality is just that.
 
 ## Usage
 
 * `zig run src/main.zig` to start REPL.
 * `zig run src/main.zig -- src/examples/mergesort.lisp` to evaluate file.
 
-Tested under Zig version `0.12.0-dev.278+0e8f130ae`.
+Tested under Zig version 0.12.0-dev.494+a8d2ed806.
 
 ```
 $ zig run src/main.zig
@@ -25,7 +25,7 @@ $ zig run src/main.zig
 ## Features
 
 
-### Value types
+### Data types
 
 * Cons cell
 * Function
@@ -61,9 +61,6 @@ $ zig run src/main.zig
     * `progn`
     * `quote`
     * `setq`
-
-Yes, some of special forms do not have to be special forms, they can be achieved by macros.
-However, this interpreter does not yet have the macro feature and it is a future work.
 
 ## License
 
