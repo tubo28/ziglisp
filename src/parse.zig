@@ -12,23 +12,17 @@ pub fn parse(tokens: []const Token) []*const Value {
     var ret = std.ArrayList(*const Value).init(common.alloc);
     var rest = tokens;
     while (rest.len != 0) {
-        const result = parseSExpr(rest);
-        ret.append(result.value) catch unreachable;
-        rest = result.rest;
+        const value, rest = parseSExpr(rest);
+        ret.append(value) catch unreachable;
     }
     return ret.toOwnedSlice() catch unreachable;
 }
-
-const ParseResult = struct {
-    value: *const Value,
-    rest: []const Token,
-};
 
 /// Parse s-expression based on BFN below.
 /// <sexpr>  ::= <atom>
 ///            | '(' <sexpr>* ')'
 ///            | <quote> <sexpr>
-fn parseSExpr(tokens: []const Token) ParseResult {
+fn parseSExpr(tokens: []const Token) struct { *const Value, []const Token } {
     if (tokens.len == 0)
         @panic("no tokens");
 
@@ -37,47 +31,47 @@ fn parseSExpr(tokens: []const Token) ParseResult {
     switch (head) {
         Token.left => {
             assert(tail.len != 0);
-            var ret = parseList(tail);
-            ret.rest = ret.rest[1..]; // consume ")"
-            return ret;
+            const value, var rest = parseList(tail);
+            rest = rest[1..]; // consume ")"
+            return .{ value, rest };
         },
         Token.quote => {
             // <quote> <sexpr> => (quote <sexpr>)
-            const listResult = parseSExpr(tail);
+            const value, const rest = parseSExpr(tail);
             const quote = common.newSymbolValue("quote");
-            return ParseResult{
-                .value = common.newConsValue(quote, common.newConsValue(listResult.value, nil())),
-                .rest = listResult.rest,
+            return .{
+                common.newConsValue(quote, common.newConsValue(value, nil())),
+                rest,
             };
         },
         Token.int => |int| {
             const atom = common.newNumberValue(int);
-            return ParseResult{ .value = atom, .rest = tokens[1..] };
+            return .{ atom, tokens[1..] };
         },
         Token.symbol => |symbol| {
             const atom = common.newSymbolValue(symbol);
-            return ParseResult{ .value = atom, .rest = tokens[1..] };
+            return .{ atom, tokens[1..] };
         },
         Token.right => @panic("unbalanced parens"),
-        Token.nil => return ParseResult{ .value = nil(), .rest = tokens[1..] },
+        Token.nil => return .{ nil(), tokens[1..] },
     }
 }
 
 // Parse sequence of s-expression based on BFN below.
 // <S-expr>*
-fn parseList(tokens: []const Token) ParseResult {
-    if (tokens.len == 0) return ParseResult{ .value = nil(), .rest = tokens };
+fn parseList(tokens: []const Token) struct { *const Value, []const Token } {
+    if (tokens.len == 0) return .{ nil(), tokens };
 
     switch (tokens[0]) {
-        Token.right => return ParseResult{ .value = nil(), .rest = tokens },
+        Token.right => return .{ nil(), tokens },
         else => {
             // Parse first S-expr
-            const car = parseSExpr(tokens);
+            const car, var rest = parseSExpr(tokens);
             // Parse following S-exprs
-            const cdr = parseList(car.rest);
+            const cdr, rest = parseList(rest);
             // Meld the results of them
-            const ret = common.newConsValue(car.value, cdr.value);
-            return ParseResult{ .value = ret, .rest = cdr.rest };
+            const ret = common.newConsValue(car, cdr);
+            return .{ ret, rest };
         },
     }
 }
