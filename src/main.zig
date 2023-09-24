@@ -31,7 +31,8 @@ fn evalFile(filepath: []const u8) !void {
 
     var buf: [65536]u8 = undefined;
     const size = try in_stream.readAll(&buf);
-    const result = eval(buf[0..size]);
+    var env = Map.init(common.alloc);
+    const result, _ = eval(buf[0..size], env);
     try stdout.print("{s}\n", .{toString(result)});
 }
 
@@ -48,7 +49,7 @@ fn repl() !void {
         };
         if (line) |l| {
             if (l.len == 0) continue;
-            const result = eval(l, &env);
+            const result, env = eval(l, env);
             try stdout.print("{s}\n", .{toString(result)});
         }
     }
@@ -63,15 +64,14 @@ fn readLine(reader: anytype) !?[]const u8 {
     return fbs.getWritten();
 }
 
-fn eval(code: []const u8) *const Value {
+fn eval(code: []const u8, env: Map) struct { *const Value, Map } {
     const tokens = T.tokenize(code);
     const sexprs = P.parse(tokens);
     var ret = nil();
-    var env = Map.init(common.alloc);
-    for (sexprs) |expr|
-        ret, env = E.evaluate(expr, env);
+    var new_env = env.clone() catch unreachable;
+    for (sexprs) |expr| ret, new_env = E.evaluate(expr, new_env);
     // std.log.debug("eval result: {s}", .{tos(ret)});
-    return ret;
+    return .{ ret, new_env };
 }
 
 fn parse(code: []const u8) []*const Value {
@@ -264,7 +264,7 @@ test "tokenize" {
     for (cases, 1..) |c, i| {
         const code = c.code;
         std.log.debug("test {}: {s}", .{ i, code });
-        const get = eval(code);
+        const get, _ = eval(code, Map.init(alloc));
         try std.testing.expect(E.deepEql(get, c.want[c.want.len - 1]));
         std.log.info("test result: ok", .{});
     }
