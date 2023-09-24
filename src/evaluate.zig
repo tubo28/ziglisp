@@ -11,8 +11,7 @@ const Value = common.Value;
 
 const Token = @import("tokenize.zig").Token;
 
-// TODO: should env be const? Should evaluate return modified env?
-pub fn evaluate(x: *const Value, env: *const Map) struct { *const Value, *const Map } {
+pub fn evaluate(x: *const Value, env: Map) struct { *const Value, Map } {
     if (isNil(x)) return .{ x, env };
     switch (x.*) {
         Value.number, Value.function => return .{ x, env },
@@ -49,9 +48,8 @@ pub fn evaluate(x: *const Value, env: *const Map) struct { *const Value, *const 
 
                     // User-defined functions.
                     if (env.get(sym)) |func| {
-                        const f = func.function;
                         const args, _ = toEvaledSlice(cdr(x), env);
-                        return callFunction(f, args);
+                        return callFunction(func, args);
                     }
 
                     // Built-in functions.
@@ -111,22 +109,27 @@ pub fn evaluate(x: *const Value, env: *const Map) struct { *const Value, *const 
     }
 }
 
-fn callFunction(func: *const Function, args: []*const Value) struct { *const Value, *const Map } {
-    if (func.params.len != args.len) {
-        std.log.err("wrong number of argument for {s}", .{func.name});
+fn callFunction(func: *const Value, args: []*const Value) struct { *const Value, Map } {
+    const f = func.function;
+    if (f.params.len != args.len) {
+        std.log.err("wrong number of argument for {s}", .{f.name});
         @panic("wrong number of arguments");
     }
 
     // Eval arguments.
-    var new_env = &(func.env.clone() catch unreachable);
-    // Overwrite if entry exist.
+    var new_env = f.env.clone() catch unreachable;
+
+    // Overwrite env entries if exist.
     // It means argument name shadows the values with same name in caller's env.
-    for (func.params, args) |param, arg|
+    // for function name
+    new_env = putPure(new_env, f.name, func);
+    // for arguments
+    for (f.params, args) |param, arg|
         new_env = putPure(new_env, param, arg);
 
     // Eval body.
     var ret = nil();
-    for (func.body) |expr| ret, new_env = evaluate(expr, new_env);
+    for (f.body) |expr| ret, new_env = evaluate(expr, new_env);
     return .{ ret, new_env };
 }
 
@@ -142,15 +145,15 @@ fn toSlice(head: *const Value) []*const Value {
     return ret.toOwnedSlice() catch unreachable;
 }
 
-fn toEvaledSlice(head: *const Value, env: *const Map) struct { []*const Value, *const Map } {
+fn toEvaledSlice(head: *const Value, env: Map) struct { []*const Value, Map } {
     var ret = toSlice(head);
-    var e = &(env.clone() catch unreachable);
+    var e = env.clone() catch unreachable;
     for (ret) |*x| x.*, e = evaluate(x.*, env);
     return .{ ret, e };
 }
 
 // special form
-fn if_(pred: *const Value, then: *const Value, unless: ?*const Value, env: *const Map) struct { *const Value, *const Map } {
+fn if_(pred: *const Value, then: *const Value, unless: ?*const Value, env: Map) struct { *const Value, Map } {
     const p, const new_env = evaluate(pred, env);
     if (toBool(p)) return evaluate(then, new_env);
     if (unless) |f| return evaluate(f, new_env);
@@ -158,8 +161,8 @@ fn if_(pred: *const Value, then: *const Value, unless: ?*const Value, env: *cons
 }
 
 // special form
-fn cond(clauses: []*const Value, env: *const Map) struct { *const Value, *const Map } {
-    var e = &(env.clone() catch unreachable);
+fn cond(clauses: []*const Value, env: Map) struct { *const Value, Map } {
+    var e = env.clone() catch unreachable;
     for (clauses) |c| {
         const tmp = toSlice(c);
         const pred = tmp[0];
@@ -184,10 +187,15 @@ fn isNil(x: *const Value) bool {
 }
 
 // special form
-fn let(pairs: *const Value, expr: *const Value, env: *const Map) struct { *const Value, *const Map } {
+fn let(pairs: *const Value, expr: *const Value, env: Map) struct { *const Value, Map } {
     const pairsSlice = toSlice(pairs);
-    var keys: [][]const u8 = undefined;
-    var vals: []*const Value = undefined;
+    const n = pairsSlice.len;
+
+    var keys: [][]const u8 = alloc.alloc([]const u8, n) catch unreachable;
+    defer alloc.free(keys);
+    var vals: []*const Value = alloc.alloc(*const Value, n) catch unreachable;
+    defer alloc.free(vals);
+
     for (pairsSlice, 0..) |p, i| {
         const keyVal = toSlice(p);
         keys[i] = keyVal[0].symbol;
@@ -196,16 +204,16 @@ fn let(pairs: *const Value, expr: *const Value, env: *const Map) struct { *const
 
     // The prior binding is not used to evaluate the following binding,
     // but the result of evaluating the RHS of a prior ones are propagated.
-    var new_env = &(env.clone() catch unreachable);
+    var new_env = env.clone() catch unreachable;
     for (0..vals.len) |i| vals[i], new_env = evaluate(vals[i], new_env);
     for (keys, vals) |k, v| new_env = putPure(new_env, k, v);
     return evaluate(expr, new_env);
 }
 
 // special form
-// The scope is lexical, i.e., the 'env' of returned value is a snapshot of the parser's env.
+// The scope is lexical, i.e., the returning 'env' value is a snapshot of the parser's env.
 // TODO: Defun can be rewritten using lambda and macro.
-fn defun(name: *const Value, params: *const Value, body: []*const Value, env: *const Map) struct { *const Value, *const Map } {
+fn defun(name: *const Value, params: *const Value, body: []*const Value, env: Map) struct { *const Value, Map } {
     var sym_params = std.ArrayList([]const u8).init(alloc);
     {
         var tmp = toSlice(params);
@@ -218,12 +226,11 @@ fn defun(name: *const Value, params: *const Value, body: []*const Value, env: *c
         body,
         env,
     );
-    const new_env = putPure(env, sym_name, func);
-    return .{ func, new_env };
+    return .{ func, putPure(env, sym_name, func) };
 }
 
 // special form
-fn setq(x: *const Value, env: *const Map) struct { *const Value, *const Map } {
+fn setq(x: *const Value, env: Map) struct { *const Value, Map } {
     if (isNil(x)) return .{ nil(), env }; // TODO: use toSlice
     const sym = symbolp(car(x)).?;
     const val, const new_env = evaluate(car(cdr(x)), env);
@@ -232,11 +239,11 @@ fn setq(x: *const Value, env: *const Map) struct { *const Value, *const Map } {
 }
 
 // special form
-fn progn(x: *const Value, env: *const Map) struct { *const Value, *const Map } {
+fn progn(x: *const Value, env: Map) struct { *const Value, Map } {
     const slice = toSlice(x);
     var ret = nil();
-    var new_env = &(env.clone() catch unreachable);
-    for (slice) |p| ret, new_env = evaluate(p, env);
+    var new_env = env.clone() catch unreachable;
+    for (slice) |p| ret, new_env = evaluate(p, new_env);
     return .{ ret, new_env }; // return the last result
 }
 
@@ -409,12 +416,8 @@ pub fn deepEql(x: *const Value, y: *const Value) bool {
     }
 }
 
-fn putPure(env: *const Map, key: []const u8, val: *const Value) *const Map {
-    _ = val;
-    _ = key;
-    _ = env;
-    unreachable;
-    // var ret = &(env.clone() catch unreachable);
-    // ret.put(key, val);
-    // return ret;
+fn putPure(env: Map, key: []const u8, val: *const Value) Map {
+    var ret = env.clone() catch unreachable;
+    ret.put(key, val) catch unreachable;
+    return ret;
 }

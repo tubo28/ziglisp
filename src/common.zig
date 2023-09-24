@@ -52,7 +52,7 @@ pub fn newFunctionValue(
     name: []const u8,
     params: [][]const u8,
     body: []*const Value,
-    env: *const Map,
+    env: Map,
 ) *const Value {
     var ret = alloc.create(Value) catch unreachable;
     ret.* = Value{ .function = newFunc(name, params, body, env) };
@@ -63,10 +63,10 @@ pub const Function = struct {
     name: []const u8,
     params: [][]const u8,
     body: []*const Value,
-    env: *const Map, // captured env (lexical scope)
+    env: Map, // captured env (lexical scope)
 };
 
-pub fn newFunc(name: []const u8, params: [][]const u8, body: []*const Value, env: *const Map) *Function {
+pub fn newFunc(name: []const u8, params: [][]const u8, body: []*const Value, env: Map) *Function {
     var ret: *Function = alloc.create(Function) catch unreachable;
     ret.* = Function{
         .name = name,

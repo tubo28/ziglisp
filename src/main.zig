@@ -67,10 +67,9 @@ fn eval(code: []const u8) *const Value {
     const tokens = T.tokenize(code);
     const sexprs = P.parse(tokens);
     var ret = nil();
-    var env = &Map.init(common.alloc);
-    for (sexprs) |expr| {
+    var env = Map.init(common.alloc);
+    for (sexprs) |expr|
         ret, env = E.evaluate(expr, env);
-    }
     // std.log.debug("eval result: {s}", .{tos(ret)});
     return ret;
 }
@@ -82,57 +81,6 @@ fn parse(code: []const u8) []*const Value {
     //     std.log.debug("parse result: {s}", .{tos(expr)});
     // }
     return sexprs;
-}
-
-const M = std.AutoHashMap(i32, i32);
-
-fn purePut(m: M, k: i32, v: i32) M {
-    const new_m = m.clone();
-    new_m.put(k, v) catch unreachable;
-    return new_m;
-}
-
-test "test1" {
-    var map1 = M.init(std.testing.allocator);
-    defer map1.deinit();
-
-    var map2 = map1;
-    try map1.put(1, 100);
-
-    try std.testing.expectEqual(
-        @as(i32, 100),
-        map1.get(1) orelse unreachable,
-    );
-    try std.testing.expectEqual(
-        @as(i32, 100),
-        map2.get(1) orelse unreachable, // <-- test fails because map2.get is null here
-    );
-}
-
-test "test2" {
-    var map1 = std.AutoHashMap(i32, i32).init(std.testing.allocator);
-    defer map1.deinit();
-    try map1.put(1, 100);
-
-    var map2 = map1;
-    try map2.put(2, 200);
-
-    try std.testing.expectEqual(
-        @as(i32, 100),
-        map1.get(1) orelse unreachable,
-    );
-    try std.testing.expectEqual(
-        @as(i32, 200),
-        map1.get(2) orelse unreachable,
-    );
-    try std.testing.expectEqual(
-        @as(i32, 100),
-        map2.get(1) orelse unreachable,
-    );
-    try std.testing.expectEqual(
-        @as(i32, 200),
-        map2.get(2) orelse unreachable,
-    );
 }
 
 test "tokenize" {
