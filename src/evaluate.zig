@@ -122,10 +122,10 @@ fn callFunction(func: *const Value, args: []*const Value) struct { *const Value,
     // Overwrite env entries if exist.
     // It means argument name shadows the values with same name in caller's env.
     // for function name
-    new_env = putPure(new_env, f.name, func);
+    new_env.put(f.name, func) catch unreachable;
     // for arguments
     for (f.params, args) |param, arg|
-        new_env = putPure(new_env, param, arg);
+        new_env.put(param, arg) catch unreachable;
 
     // Eval body.
     var ret = nil();
@@ -233,9 +233,9 @@ fn defun(name: *const Value, params: *const Value, body: []*const Value, env: Ma
 fn setq(x: *const Value, env: Map) struct { *const Value, Map } {
     if (isNil(x)) return .{ nil(), env }; // TODO: use toSlice
     const sym = symbolp(car(x)).?;
-    const val, const new_env = evaluate(car(cdr(x)), env);
-    const new_new_env = putPure(new_env, sym, val);
-    return .{ val, new_new_env };
+    const val, var new_env = evaluate(car(cdr(x)), env);
+    new_env.put(sym, val) catch unreachable;
+    return .{ val, new_env };
 }
 
 // special form
