@@ -5,11 +5,12 @@ const Token = @import("tokenize.zig").Token;
 
 const common = @import("common.zig");
 const Value = common.Value;
+const ValueRef = common.ValueRef;
 const nil = common.nil;
 
 // parse returns list of s-expr.
-pub fn parse(tokens: []const Token) []*const Value {
-    var ret = std.ArrayList(*const Value).init(common.alloc);
+pub fn parse(tokens: []const Token) []ValueRef {
+    var ret = std.ArrayList(ValueRef).init(common.alloc);
     var rest = tokens;
     while (rest.len != 0) {
         const value, rest = parseSExpr(rest);
@@ -22,7 +23,7 @@ pub fn parse(tokens: []const Token) []*const Value {
 /// <sexpr>  ::= <atom>
 ///            | '(' <sexpr>* ')'
 ///            | <quote> <sexpr>
-fn parseSExpr(tokens: []const Token) struct { *const Value, []const Token } {
+fn parseSExpr(tokens: []const Token) struct { ValueRef, []const Token } {
     if (tokens.len == 0)
         @panic("no tokens");
 
@@ -59,7 +60,7 @@ fn parseSExpr(tokens: []const Token) struct { *const Value, []const Token } {
 
 // Parse sequence of s-expression based on BFN below.
 // <S-expr>*
-fn parseList(tokens: []const Token) struct { *const Value, []const Token } {
+fn parseList(tokens: []const Token) struct { ValueRef, []const Token } {
     if (tokens.len == 0) return .{ nil(), tokens };
 
     switch (tokens[0]) {

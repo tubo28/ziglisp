@@ -1,15 +1,18 @@
 const std = @import("std");
-pub const Map = std.StringHashMap(*const Value);
+
+pub const ValueRef = *const Value;
+
+pub const Map = std.StringHashMap(ValueRef);
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 pub const alloc = gpa.allocator();
 
 pub const Cons = struct {
-    car: *const Value,
-    cdr: *const Value,
+    car: ValueRef,
+    cdr: ValueRef,
 };
 
-pub fn newCons(car: *const Value, cdr: *const Value) *Cons {
+pub fn newCons(car: ValueRef, cdr: ValueRef) *Cons {
     var cons: *Cons = alloc.create(Cons) catch unreachable;
     cons.* = Cons{ .car = car, .cdr = cdr };
     return cons;
@@ -24,21 +27,21 @@ pub const Value = union(enum) {
     function: *Function,
 };
 
-pub fn newConsValue(car: *const Value, cdr: *const Value) *const Value {
+pub fn newConsValue(car: ValueRef, cdr: ValueRef) ValueRef {
     var ret = alloc.create(Value) catch unreachable;
     ret.* = Value{ .cons = newCons(car, cdr) };
     return ret;
 }
 
-pub fn newNumberValue(x: i64) *const Value {
+pub fn newNumberValue(x: i64) ValueRef {
     return newAtomValue(i64, x);
 }
 
-pub fn newSymbolValue(x: []const u8) *const Value {
+pub fn newSymbolValue(x: []const u8) ValueRef {
     return newAtomValue([]const u8, x);
 }
 
-fn newAtomValue(comptime T: type, value: T) *const Value {
+fn newAtomValue(comptime T: type, value: T) ValueRef {
     var ret = alloc.create(Value) catch unreachable;
     switch (T) {
         i64 => ret.* = Value{ .number = value },
@@ -51,9 +54,9 @@ fn newAtomValue(comptime T: type, value: T) *const Value {
 pub fn newFunctionValue(
     name: []const u8,
     params: [][]const u8,
-    body: []*const Value,
+    body: []ValueRef,
     env: Map,
-) *const Value {
+) ValueRef {
     var ret = alloc.create(Value) catch unreachable;
     ret.* = Value{ .function = newFunc(name, params, body, env) };
     return ret;
@@ -62,11 +65,11 @@ pub fn newFunctionValue(
 pub const Function = struct {
     name: []const u8,
     params: [][]const u8,
-    body: []*const Value,
+    body: []ValueRef,
     env: Map, // captured env (lexical scope)
 };
 
-pub fn newFunc(name: []const u8, params: [][]const u8, body: []*const Value, env: Map) *Function {
+pub fn newFunc(name: []const u8, params: [][]const u8, body: []ValueRef, env: Map) *Function {
     var ret: *Function = alloc.create(Function) catch unreachable;
     ret.* = Function{
         .name = name,
@@ -81,7 +84,7 @@ var nil_opt: ?*Value = null;
 var t_opt: ?*Value = null;
 
 /// nil is a ConsCell such that both its car and cdr are itself.
-pub fn nil() *const Value {
+pub fn nil() ValueRef {
     if (nil_opt) |n| return n;
     var n = alloc.create(Value) catch unreachable;
     n.* = Value{ .cons = newCons(n, n) };
@@ -89,7 +92,7 @@ pub fn nil() *const Value {
     return nil_opt.?;
 }
 
-pub fn t() *const Value {
+pub fn t() ValueRef {
     if (t_opt) |tt| return tt;
     var t_ = alloc.create(Value) catch unreachable;
     t_.* = Value{ .symbol = "t" };
@@ -97,14 +100,14 @@ pub fn t() *const Value {
     return t_opt.?;
 }
 
-pub fn toString(cell: *const Value) []const u8 {
+pub fn toString(cell: ValueRef) []const u8 {
     var buf = std.ArrayList(u8).init(alloc);
     defer buf.deinit();
     toStringInner(cell, &buf);
     return buf.toOwnedSlice() catch unreachable;
 }
 
-fn toStringInner(cell: *const Value, builder: *std.ArrayList(u8)) void {
+fn toStringInner(cell: ValueRef, builder: *std.ArrayList(u8)) void {
     if (cell == nil()) {
         builder.appendSlice("nil") catch unreachable;
         return;
@@ -129,7 +132,7 @@ fn toStringInner(cell: *const Value, builder: *std.ArrayList(u8)) void {
     }
 }
 
-fn consToString(x: *const Value, builder: *std.ArrayList(u8)) void {
+fn consToString(x: ValueRef, builder: *std.ArrayList(u8)) void {
     switch (consOpt(x).?.cdr.*) {
         Value.cons => {
             // List
@@ -159,7 +162,7 @@ fn consToString(x: *const Value, builder: *std.ArrayList(u8)) void {
     }
 }
 
-fn consOpt(x: *const Value) ?*const Cons {
+fn consOpt(x: ValueRef) ?*const Cons {
     return switch (x.*) {
         Value.cons => |cons| cons,
         else => null,

@@ -1,5 +1,7 @@
 const std = @import("std");
-const Map = std.StringHashMap(*const Value);
+
+const V = common.ValueRef;
+const Map = common.Map;
 
 const common = @import("common.zig");
 const nil = common.nil;
@@ -64,7 +66,7 @@ fn readLine(reader: anytype) !?[]const u8 {
     return fbs.getWritten();
 }
 
-fn eval(code: []const u8, env: Map) struct { *const Value, Map } {
+fn eval(code: []const u8, env: Map) struct { V, Map } {
     const tokens = T.tokenize(code);
     const sexprs = P.parse(tokens);
     var ret = nil();
@@ -74,7 +76,7 @@ fn eval(code: []const u8, env: Map) struct { *const Value, Map } {
     return .{ ret, new_env };
 }
 
-fn parse(code: []const u8) []*const Value {
+fn parse(code: []const u8) []V {
     const tokens = T.tokenize(code);
     const sexprs = P.parse(tokens);
     // for (sexprs) |expr| {
@@ -86,7 +88,7 @@ fn parse(code: []const u8) []*const Value {
 test "tokenize" {
     const TestCase = struct {
         code: []const u8,
-        want: []*const Value,
+        want: []V,
     };
 
     const cases = [_]TestCase{

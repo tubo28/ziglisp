@@ -7,11 +7,12 @@ const Map = common.Map;
 const nil = common.nil;
 const t = common.t;
 const toString = common.toString;
+const ValueRef = common.ValueRef;
 const Value = common.Value;
 
 const Token = @import("tokenize.zig").Token;
 
-pub fn evaluate(x: *const Value, env: Map) struct { *const Value, Map } {
+pub fn evaluate(x: ValueRef, env: Map) struct { ValueRef, Map } {
     if (isNil(x)) return .{ x, env };
     switch (x.*) {
         Value.number, Value.function => return .{ x, env },
@@ -109,7 +110,7 @@ pub fn evaluate(x: *const Value, env: Map) struct { *const Value, Map } {
     }
 }
 
-fn callFunction(func: *const Value, args: []*const Value) struct { *const Value, Map } {
+fn callFunction(func: ValueRef, args: []ValueRef) struct { ValueRef, Map } {
     const f = func.function;
     if (f.params.len != args.len) {
         std.log.err("wrong number of argument for {s}", .{f.name});
@@ -134,8 +135,8 @@ fn callFunction(func: *const Value, args: []*const Value) struct { *const Value,
 }
 
 // Convert sequence of cons cell like (foo bar buz) to slice.
-fn toSlice(head: *const Value) []*const Value {
-    var ret = std.ArrayList(*const Value).init(alloc); // defer deinit?
+fn toSlice(head: ValueRef) []ValueRef {
+    var ret = std.ArrayList(ValueRef).init(alloc); // defer deinit?
     var h = head;
     while (h != nil()) {
         const x = car(h);
@@ -145,7 +146,7 @@ fn toSlice(head: *const Value) []*const Value {
     return ret.toOwnedSlice() catch unreachable;
 }
 
-fn toEvaledSlice(head: *const Value, env: Map) struct { []*const Value, Map } {
+fn toEvaledSlice(head: ValueRef, env: Map) struct { []ValueRef, Map } {
     var ret = toSlice(head);
     var e = env.clone() catch unreachable;
     for (ret) |*x| x.*, e = evaluate(x.*, env);
@@ -153,7 +154,7 @@ fn toEvaledSlice(head: *const Value, env: Map) struct { []*const Value, Map } {
 }
 
 // special form
-fn if_(pred: *const Value, then: *const Value, unless: ?*const Value, env: Map) struct { *const Value, Map } {
+fn if_(pred: ValueRef, then: ValueRef, unless: ?ValueRef, env: Map) struct { ValueRef, Map } {
     const p, const new_env = evaluate(pred, env);
     if (toBool(p)) return evaluate(then, new_env);
     if (unless) |f| return evaluate(f, new_env);
@@ -161,7 +162,7 @@ fn if_(pred: *const Value, then: *const Value, unless: ?*const Value, env: Map) 
 }
 
 // special form
-fn cond(clauses: []*const Value, env: Map) struct { *const Value, Map } {
+fn cond(clauses: []ValueRef, env: Map) struct { ValueRef, Map } {
     var e = env.clone() catch unreachable;
     for (clauses) |c| {
         const tmp = toSlice(c);
@@ -173,12 +174,12 @@ fn cond(clauses: []*const Value, env: Map) struct { *const Value, Map } {
     return .{ nil(), e };
 }
 
-fn toBool(x: *const Value) bool {
+fn toBool(x: ValueRef) bool {
     return !isNil(x);
 }
 
 // TODO: rename this to null_
-fn isNil(x: *const Value) bool {
+fn isNil(x: ValueRef) bool {
     if (x == nil()) return true;
     switch (x.*) {
         Value.cons => |cons| if (cons.car == nil() and cons.cdr == nil()) return true else return false,
@@ -187,13 +188,13 @@ fn isNil(x: *const Value) bool {
 }
 
 // special form
-fn let(pairs: *const Value, expr: *const Value, env: Map) struct { *const Value, Map } {
+fn let(pairs: ValueRef, expr: ValueRef, env: Map) struct { ValueRef, Map } {
     const pairsSlice = toSlice(pairs);
     const n = pairsSlice.len;
 
     var keys: [][]const u8 = alloc.alloc([]const u8, n) catch unreachable;
     defer alloc.free(keys);
-    var vals: []*const Value = alloc.alloc(*const Value, n) catch unreachable;
+    var vals: []ValueRef = alloc.alloc(ValueRef, n) catch unreachable;
     defer alloc.free(vals);
 
     for (pairsSlice, 0..) |p, i| {
@@ -213,7 +214,7 @@ fn let(pairs: *const Value, expr: *const Value, env: Map) struct { *const Value,
 // special form
 // The scope is lexical, i.e., the returning 'env' value is a snapshot of the parser's env.
 // TODO: Defun can be rewritten using lambda and macro.
-fn defun(name: *const Value, params: *const Value, body: []*const Value, env: Map) struct { *const Value, Map } {
+fn defun(name: ValueRef, params: ValueRef, body: []ValueRef, env: Map) struct { ValueRef, Map } {
     var sym_params = std.ArrayList([]const u8).init(alloc);
     {
         var tmp = toSlice(params);
@@ -230,7 +231,7 @@ fn defun(name: *const Value, params: *const Value, body: []*const Value, env: Ma
 }
 
 // special form
-fn setq(x: *const Value, env: Map) struct { *const Value, Map } {
+fn setq(x: ValueRef, env: Map) struct { ValueRef, Map } {
     if (isNil(x)) return .{ nil(), env }; // TODO: use toSlice
     const sym = symbolp(car(x)).?;
     const val, var new_env = evaluate(car(cdr(x)), env);
@@ -239,7 +240,7 @@ fn setq(x: *const Value, env: Map) struct { *const Value, Map } {
 }
 
 // special form
-fn progn(x: *const Value, env: Map) struct { *const Value, Map } {
+fn progn(x: ValueRef, env: Map) struct { ValueRef, Map } {
     const slice = toSlice(x);
     var ret = nil();
     var new_env = env.clone() catch unreachable;
@@ -248,22 +249,22 @@ fn progn(x: *const Value, env: Map) struct { *const Value, Map } {
 }
 
 // built-in func
-fn car(x: *const Value) *const Value {
+fn car(x: ValueRef) ValueRef {
     return x.cons.car;
 }
 
 // built-in func
-fn cdr(x: *const Value) *const Value {
+fn cdr(x: ValueRef) ValueRef {
     return x.cons.cdr;
 }
 
 // built-in func
-fn cons_(car_: *const Value, cdr_: *const Value) *const Value {
+fn cons_(car_: ValueRef, cdr_: ValueRef) ValueRef {
     return common.newConsValue(car_, cdr_);
 }
 
 // built-in func
-fn list(xs: []*const Value) *const Value {
+fn list(xs: []ValueRef) ValueRef {
     var ret = nil();
     var i = xs.len;
     while (i > 0) {
@@ -274,7 +275,7 @@ fn list(xs: []*const Value) *const Value {
 }
 
 // built-in func
-fn atomp(cons: *const Value) ?*const Value {
+fn atomp(cons: ValueRef) ?ValueRef {
     switch (cons.*) {
         Value.cons => return null,
         else => return cons,
@@ -282,7 +283,7 @@ fn atomp(cons: *const Value) ?*const Value {
 }
 
 // built-in func
-fn numberp(atom: *const Value) ?i64 {
+fn numberp(atom: ValueRef) ?i64 {
     switch (atom.*) {
         Value.number => |num| return num,
         else => return null,
@@ -290,7 +291,7 @@ fn numberp(atom: *const Value) ?i64 {
 }
 
 // built-in func
-fn symbolp(atom: *const Value) ?[]const u8 {
+fn symbolp(atom: ValueRef) ?[]const u8 {
     switch (atom.*) {
         Value.symbol => |sym| return sym,
         else => return null,
@@ -298,14 +299,14 @@ fn symbolp(atom: *const Value) ?[]const u8 {
 }
 
 // built-in func
-fn add(xs: []*const Value) *const Value {
+fn add(xs: []ValueRef) ValueRef {
     var ret: i64 = 0;
     for (xs) |x| ret += numberp(x).?;
     return common.newNumberValue(ret);
 }
 
 // built-in func
-fn sub(xs: []*const Value) *const Value {
+fn sub(xs: []ValueRef) ValueRef {
     var ret: i64 = 0;
     for (xs, 0..) |x, i| {
         if (i == 0) ret += numberp(x).? else ret -= numberp(x).?;
@@ -314,7 +315,7 @@ fn sub(xs: []*const Value) *const Value {
 }
 
 // built-in func
-fn mul(xs: []*const Value) *const Value {
+fn mul(xs: []ValueRef) ValueRef {
     var ret: i64 = 1;
     for (xs, 0..) |x, i| {
         if (i == 0) ret *= numberp(x).?;
@@ -323,7 +324,7 @@ fn mul(xs: []*const Value) *const Value {
 }
 
 // built-in func
-fn div(xs: []*const Value) *const Value {
+fn div(xs: []ValueRef) ValueRef {
     var ret: i64 = 1;
     for (xs, 0..) |x, i| {
         if (i == 0) ret *= numberp(x).? else ret = @divFloor(ret, numberp(x).?);
@@ -332,60 +333,60 @@ fn div(xs: []*const Value) *const Value {
 }
 
 // built-in func
-fn or_(xs: []*const Value) *const Value {
+fn or_(xs: []ValueRef) ValueRef {
     for (xs) |x| if (toBool(x)) return t();
     return nil();
 }
 
 // built-in func
-fn and_(xs: []*const Value) *const Value {
+fn and_(xs: []ValueRef) ValueRef {
     for (xs) |x| if (!toBool(x)) return nil();
     return t();
 }
 
 // built-in func
-fn eq(x: *const Value, y: *const Value) *const Value {
+fn eq(x: ValueRef, y: ValueRef) ValueRef {
     if (deepEql(x, y)) return t();
     return nil();
 }
 
-fn boolAsSymbol(x: bool) *const Value {
+fn boolAsSymbol(x: bool) ValueRef {
     return if (x) t() else nil();
 }
 
 // built-in func
-fn le(x: *const Value, y: *const Value) *const Value {
+fn le(x: ValueRef, y: ValueRef) ValueRef {
     return boolAsSymbol(x.number < y.number);
 }
 
 // built-in func
-fn leq(x: *const Value, y: *const Value) *const Value {
+fn leq(x: ValueRef, y: ValueRef) ValueRef {
     return boolAsSymbol(x.number <= y.number);
 }
 
 // built-in func
-fn ge(x: *const Value, y: *const Value) *const Value {
+fn ge(x: ValueRef, y: ValueRef) ValueRef {
     return boolAsSymbol(x.number > y.number);
 }
 
 // built-in func
-fn geq(x: *const Value, y: *const Value) *const Value {
+fn geq(x: ValueRef, y: ValueRef) ValueRef {
     return boolAsSymbol(x.number > y.number);
 }
 
 // built-in func
-fn length(x: *const Value) *const Value {
+fn length(x: ValueRef) ValueRef {
     const slice = toSlice(x);
     return common.newNumberValue(@intCast(slice.len));
 }
 
 // built-in func
-fn null_(x: *const Value) *const Value {
+fn null_(x: ValueRef) ValueRef {
     return boolAsSymbol(isNil(x));
 }
 
 // built-in func
-fn print(x: *const Value) *const Value {
+fn print(x: ValueRef) ValueRef {
     const str = common.toString(x);
     const stdout = std.io.getStdOut().writer();
     nosuspend stdout.print("#print: {s}\n", .{str}) catch unreachable;
@@ -394,7 +395,7 @@ fn print(x: *const Value) *const Value {
 
 /// The "deep equal" function for values.
 /// Equality of function values are only based on the names.
-pub fn deepEql(x: *const Value, y: *const Value) bool {
+pub fn deepEql(x: ValueRef, y: ValueRef) bool {
     if (x == nil() or y == nil()) return x == y;
     switch (x.*) {
         Value.number => |x_| switch (y.*) {
@@ -416,7 +417,7 @@ pub fn deepEql(x: *const Value, y: *const Value) bool {
     }
 }
 
-fn putPure(env: Map, key: []const u8, val: *const Value) Map {
+fn putPure(env: Map, key: []const u8, val: ValueRef) Map {
     var ret = env.clone() catch unreachable;
     ret.put(key, val) catch unreachable;
     return ret;
