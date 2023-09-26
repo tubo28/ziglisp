@@ -39,6 +39,8 @@ pub fn evaluate(x: ValueRef, env: Map) struct { ValueRef, Map } {
                             return setq(cdr(x), env);
                         if (eql(u8, sym, "defun"))
                             return defun(args[0], args[1], args[2..], env);
+                        if (eql(u8, sym, "lambda"))
+                            return lambda(args[0], args[1], env);
                         if (eql(u8, sym, "if"))
                             return if_(args[0], args[1], if (args.len >= 3) args[2] else null, env);
                         if (eql(u8, sym, "cond"))
@@ -228,6 +230,23 @@ fn defun(name: ValueRef, params: ValueRef, body: []ValueRef, env: Map) struct { 
         env,
     );
     return .{ func, putPure(env, sym_name, func) };
+}
+
+fn lambda(params: ValueRef, body: ValueRef, env: Map) struct { ValueRef, Map } {
+    var sym_params = std.ArrayList([]const u8).init(alloc);
+    {
+        var tmp = toSlice(params);
+        for (tmp) |a| sym_params.append(symbolp(a).?) catch unreachable;
+    }
+    var b = alloc.alloc(ValueRef, 1) catch unreachable;
+    b[0] = body;
+    const func = common.newFunctionValue(
+        "lambda",
+        sym_params.toOwnedSlice() catch unreachable,
+        b,
+        env,
+    );
+    return .{ func, env };
 }
 
 // special form

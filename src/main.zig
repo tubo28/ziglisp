@@ -260,6 +260,10 @@ test "tokenize" {
             .code = @embedFile("examples/tarai.lisp"),
             .want = parse("8"),
         },
+        TestCase{
+            .code = "(let ((f (lambda (x) (+ x x)))) (f 1))",
+            .want = parse("2"),
+        },
     };
 
     std.testing.log_level = std.log.Level.debug;

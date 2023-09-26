@@ -65,7 +65,7 @@ pub fn newFunctionValue(
 pub const Function = struct {
     name: []const u8,
     params: [][]const u8,
-    body: []ValueRef,
+    body: []ValueRef, // TODO: Make this single
     env: Map, // captured env (lexical scope)
 };
 
