@@ -12,7 +12,9 @@ const Value = common.Value;
 
 const Token = @import("tokenize.zig").Token;
 
-pub fn evaluate(x: ValueRef, env: Map) struct { ValueRef, Map } {
+pub const EvalResult = struct { ValueRef, Map };
+
+pub fn evaluate(x: ValueRef, env: Map) EvalResult {
     if (isNil(x)) return .{ x, env };
     switch (x.*) {
         Value.number, Value.function => return .{ x, env },
@@ -112,7 +114,7 @@ pub fn evaluate(x: ValueRef, env: Map) struct { ValueRef, Map } {
     }
 }
 
-fn callFunction(func: ValueRef, args: []ValueRef) struct { ValueRef, Map } {
+fn callFunction(func: ValueRef, args: []ValueRef) EvalResult {
     const f = func.function;
     if (f.params.len != args.len) {
         std.log.err("wrong number of argument for {s}", .{f.name});
@@ -156,7 +158,7 @@ fn toEvaledSlice(head: ValueRef, env: Map) struct { []ValueRef, Map } {
 }
 
 // special form
-fn if_(pred: ValueRef, then: ValueRef, unless: ?ValueRef, env: Map) struct { ValueRef, Map } {
+fn if_(pred: ValueRef, then: ValueRef, unless: ?ValueRef, env: Map) EvalResult {
     const p, const new_env = evaluate(pred, env);
     if (toBool(p)) return evaluate(then, new_env);
     if (unless) |f| return evaluate(f, new_env);
@@ -164,7 +166,7 @@ fn if_(pred: ValueRef, then: ValueRef, unless: ?ValueRef, env: Map) struct { Val
 }
 
 // special form
-fn cond(clauses: []ValueRef, env: Map) struct { ValueRef, Map } {
+fn cond(clauses: []ValueRef, env: Map) EvalResult {
     var e = env.clone() catch unreachable;
     for (clauses) |c| {
         const tmp = toSlice(c);
@@ -190,7 +192,7 @@ fn isNil(x: ValueRef) bool {
 }
 
 // special form
-fn let(pairs: ValueRef, expr: ValueRef, env: Map) struct { ValueRef, Map } {
+fn let(pairs: ValueRef, expr: ValueRef, env: Map) EvalResult {
     const pairsSlice = toSlice(pairs);
     const n = pairsSlice.len;
 
@@ -216,7 +218,7 @@ fn let(pairs: ValueRef, expr: ValueRef, env: Map) struct { ValueRef, Map } {
 // special form
 // The scope is lexical, i.e., the returning 'env' value is a snapshot of the parser's env.
 // TODO: Defun can be rewritten using lambda and macro.
-fn defun(name: ValueRef, params: ValueRef, body: []ValueRef, env: Map) struct { ValueRef, Map } {
+fn defun(name: ValueRef, params: ValueRef, body: []ValueRef, env: Map) EvalResult {
     var sym_params = std.ArrayList([]const u8).init(alloc);
     {
         var tmp = toSlice(params);
@@ -232,7 +234,7 @@ fn defun(name: ValueRef, params: ValueRef, body: []ValueRef, env: Map) struct { 
     return .{ func, putPure(env, sym_name, func) };
 }
 
-fn lambda(params: ValueRef, body: ValueRef, env: Map) struct { ValueRef, Map } {
+fn lambda(params: ValueRef, body: ValueRef, env: Map) EvalResult {
     var sym_params = std.ArrayList([]const u8).init(alloc);
     {
         var tmp = toSlice(params);
@@ -250,7 +252,7 @@ fn lambda(params: ValueRef, body: ValueRef, env: Map) struct { ValueRef, Map } {
 }
 
 // special form
-fn setq(x: ValueRef, env: Map) struct { ValueRef, Map } {
+fn setq(x: ValueRef, env: Map) EvalResult {
     if (isNil(x)) return .{ nil(), env }; // TODO: use toSlice
     const sym = symbolp(car(x)).?;
     const val, var new_env = evaluate(car(cdr(x)), env);
@@ -259,7 +261,7 @@ fn setq(x: ValueRef, env: Map) struct { ValueRef, Map } {
 }
 
 // special form
-fn progn(x: ValueRef, env: Map) struct { ValueRef, Map } {
+fn progn(x: ValueRef, env: Map) EvalResult {
     const slice = toSlice(x);
     var ret = nil();
     var new_env = env.clone() catch unreachable;
