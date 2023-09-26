@@ -2,6 +2,7 @@ const std = @import("std");
 pub const assert = std.debug.assert;
 
 const Token = @import("tokenize.zig").Token;
+const TokenKind = @import("tokenize.zig").TokenKind;
 
 const common = @import("common.zig");
 const Value = common.Value;
@@ -29,14 +30,14 @@ fn parseSExpr(tokens: []const Token) struct { ValueRef, []const Token } {
 
     const head = tokens[0];
     const tail = tokens[1..];
-    switch (head) {
-        Token.left => {
+    switch (head.kind) {
+        TokenKind.left => {
             assert(tail.len != 0);
             const value, var rest = parseList(tail);
             rest = rest[1..]; // consume ")"
             return .{ value, rest };
         },
-        Token.quote => {
+        TokenKind.quote => {
             // <quote> <sexpr> => (quote <sexpr>)
             const value, const rest = parseSExpr(tail);
             const quote = common.newSymbolValue("quote");
@@ -45,16 +46,16 @@ fn parseSExpr(tokens: []const Token) struct { ValueRef, []const Token } {
                 rest,
             };
         },
-        Token.int => |int| {
+        TokenKind.int => |int| {
             const atom = common.newNumberValue(int);
             return .{ atom, tokens[1..] };
         },
-        Token.symbol => |symbol| {
+        TokenKind.symbol => |symbol| {
             const atom = common.newSymbolValue(symbol);
             return .{ atom, tokens[1..] };
         },
-        Token.right => @panic("unbalanced parens"),
-        Token.nil => return .{ nil(), tokens[1..] },
+        TokenKind.right => @panic("unbalanced parens"),
+        TokenKind.nil => return .{ nil(), tokens[1..] },
     }
 }
 
@@ -63,8 +64,8 @@ fn parseSExpr(tokens: []const Token) struct { ValueRef, []const Token } {
 fn parseList(tokens: []const Token) struct { ValueRef, []const Token } {
     if (tokens.len == 0) return .{ nil(), tokens };
 
-    switch (tokens[0]) {
-        Token.right => return .{ nil(), tokens },
+    switch (tokens[0].kind) {
+        TokenKind.right => return .{ nil(), tokens },
         else => {
             // Parse first S-expr
             const car, var rest = parseSExpr(tokens);
