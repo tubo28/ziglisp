@@ -21,7 +21,7 @@ fn isSymbolChar(c: u8) bool {
     return !std.ascii.isWhitespace(c) and c != ')' and c != '(' and c != '\'';
 }
 
-pub fn tokenize(code: []const u8) []const Token {
+pub fn tokenize(code: []const u8) ![]const Token {
     var toks = std.ArrayList(Token).init(alloc); // defer deinit?
 
     var i: usize = 0;
@@ -45,19 +45,19 @@ pub fn tokenize(code: []const u8) []const Token {
         }
 
         if (code[i] == '(') {
-            toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind.left }) catch unreachable;
+            try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind.left });
             i += 1;
             continue;
         }
 
         if (code[i] == ')') {
-            toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind.right }) catch unreachable;
+            try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind.right });
             i += 1;
             continue;
         }
 
         if (code[i] == '\'') {
-            toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind.quote }) catch unreachable;
+            try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind.quote });
             i += 1;
             continue;
         }
@@ -66,8 +66,8 @@ pub fn tokenize(code: []const u8) []const Token {
             var begin = i;
             while (i < code.len and ascii.isDigit(code[i]))
                 i += 1;
-            const val = std.fmt.parseInt(i64, code[begin..i], 10) catch unreachable;
-            toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind{ .int = val } }) catch unreachable;
+            const val = try std.fmt.parseInt(i64, code[begin..i], 10);
+            try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind{ .int = val } });
             continue;
         }
 
@@ -79,10 +79,10 @@ pub fn tokenize(code: []const u8) []const Token {
             const sym = code[begin..i];
             // special symbol
             if (std.mem.eql(u8, sym, "nil")) {
-                toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind.nil }) catch unreachable;
+                try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind.nil });
                 continue;
             }
-            toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind{ .symbol = sym } }) catch unreachable;
+            try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind{ .symbol = sym } });
             continue;
         }
     }

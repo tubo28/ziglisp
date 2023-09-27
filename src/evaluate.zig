@@ -14,7 +14,7 @@ const Token = @import("tokenize.zig").Token;
 
 pub const EvalResult = struct { ValueRef, Map };
 
-pub fn evaluate(x: ValueRef, env: Map) EvalResult {
+pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
     if (isNil(x)) return .{ x, env };
     switch (x.*) {
         Value.number, Value.function => return .{ x, env },
@@ -32,7 +32,7 @@ pub fn evaluate(x: ValueRef, env: Map) EvalResult {
                     // Special forms.
                     // TODO: Rewrite some of below by macro.
                     {
-                        const args = toSlice(cdr(x));
+                        const args = try toSlice(cdr(x));
                         if (eql(u8, sym, "quote"))
                             return .{ args[0], env };
                         if (eql(u8, sym, "progn"))
@@ -53,7 +53,7 @@ pub fn evaluate(x: ValueRef, env: Map) EvalResult {
 
                     // User-defined functions.
                     if (env.get(sym)) |func| {
-                        const args, _ = toEvaledSlice(cdr(x), env);
+                        const args, _ = try toEvaledSlice(cdr(x), env);
                         return callFunction(func, args);
                     }
 
@@ -67,25 +67,25 @@ pub fn evaluate(x: ValueRef, env: Map) EvalResult {
                         for (names) |n| found = found or eql(u8, sym, n);
                         if (!found) break :builtin;
 
-                        const args, const new_env = toEvaledSlice(cdr(x), env);
+                        const args, const new_env = try toEvaledSlice(cdr(x), env);
                         if (eql(u8, sym, "car"))
                             return .{ car(args[0]), new_env };
                         if (eql(u8, sym, "cdr"))
                             return .{ cdr(args[0]), new_env };
                         if (eql(u8, sym, "cons"))
-                            return .{ cons_(args[0], args[1]), new_env };
+                            return .{ try cons_(args[0], args[1]), new_env };
                         if (eql(u8, sym, "list"))
-                            return .{ list(args), new_env };
+                            return .{ try list(args), new_env };
                         if (eql(u8, sym, "print"))
-                            return .{ print(args[0]), new_env };
+                            return .{ try print(args[0]), new_env };
                         if (eql(u8, sym, "+"))
-                            return .{ add(args), new_env };
+                            return .{ try add(args), new_env };
                         if (eql(u8, sym, "-"))
-                            return .{ sub(args), new_env };
+                            return .{ try sub(args), new_env };
                         if (eql(u8, sym, "*"))
-                            return .{ mul(args), new_env };
+                            return .{ try mul(args), new_env };
                         if (eql(u8, sym, "/"))
-                            return .{ div(args), new_env };
+                            return .{ try div(args), new_env };
                         if (eql(u8, sym, "="))
                             return .{ eq(args[0], args[1]), new_env };
                         if (eql(u8, sym, "<"))
@@ -101,7 +101,7 @@ pub fn evaluate(x: ValueRef, env: Map) EvalResult {
                         if (eql(u8, sym, "and"))
                             return .{ and_(args), new_env };
                         if (eql(u8, sym, "length"))
-                            return .{ length(args[0]), new_env };
+                            return .{ try length(args[0]), new_env };
                         if (eql(u8, sym, "null"))
                             return .{ null_(args[0]), new_env };
                     }
@@ -114,7 +114,7 @@ pub fn evaluate(x: ValueRef, env: Map) EvalResult {
     }
 }
 
-fn callFunction(func: ValueRef, args: []ValueRef) EvalResult {
+fn callFunction(func: ValueRef, args: []ValueRef) anyerror!EvalResult {
     const f = func.function;
     if (f.params.len != args.len) {
         std.log.err("wrong number of argument for {s}", .{f.name});
@@ -122,24 +122,24 @@ fn callFunction(func: ValueRef, args: []ValueRef) EvalResult {
     }
 
     // Eval arguments.
-    var new_env = f.env.clone() catch unreachable;
+    var new_env = try f.env.clone();
 
     // Overwrite env entries if exist.
     // It means argument name shadows the values with same name in caller's env.
     // for function name
-    new_env.put(f.name, func) catch unreachable;
+    try new_env.put(f.name, func);
     // for arguments
     for (f.params, args) |param, arg|
-        new_env.put(param, arg) catch unreachable;
+        try new_env.put(param, arg);
 
     // Eval body.
     var ret = nil();
-    for (f.body) |expr| ret, new_env = evaluate(expr, new_env);
+    for (f.body) |expr| ret, new_env = try evaluate(expr, new_env);
     return .{ ret, new_env };
 }
 
 // Convert sequence of cons cell like (foo bar buz) to slice.
-fn toSlice(head: ValueRef) []ValueRef {
+fn toSlice(head: ValueRef) ![]ValueRef {
     var ret = std.ArrayList(ValueRef).init(alloc); // defer deinit?
     var h = head;
     while (h != nil()) {
@@ -147,32 +147,32 @@ fn toSlice(head: ValueRef) []ValueRef {
         ret.append(x) catch @panic("cannot append");
         h = cdr(h);
     }
-    return ret.toOwnedSlice() catch unreachable;
+    return try ret.toOwnedSlice();
 }
 
-fn toEvaledSlice(head: ValueRef, env: Map) struct { []ValueRef, Map } {
-    var ret = toSlice(head);
-    var e = env.clone() catch unreachable;
-    for (ret) |*x| x.*, e = evaluate(x.*, env);
+fn toEvaledSlice(head: ValueRef, env: Map) !struct { []ValueRef, Map } {
+    var ret = try toSlice(head);
+    var e = try env.clone();
+    for (ret) |*x| x.*, e = try evaluate(x.*, env);
     return .{ ret, e };
 }
 
 // special form
-fn if_(pred: ValueRef, then: ValueRef, unless: ?ValueRef, env: Map) EvalResult {
-    const p, const new_env = evaluate(pred, env);
-    if (toBool(p)) return evaluate(then, new_env);
-    if (unless) |f| return evaluate(f, new_env);
+fn if_(pred: ValueRef, then: ValueRef, unless: ?ValueRef, env: Map) anyerror!EvalResult {
+    const p, const new_env = try evaluate(pred, env);
+    if (toBool(p)) return try evaluate(then, new_env);
+    if (unless) |f| return try evaluate(f, new_env);
     return .{ nil(), new_env };
 }
 
 // special form
-fn cond(clauses: []ValueRef, env: Map) EvalResult {
-    var e = env.clone() catch unreachable;
+fn cond(clauses: []ValueRef, env: Map) anyerror!EvalResult {
+    var e = try env.clone();
     for (clauses) |c| {
-        const tmp = toSlice(c);
+        const tmp = try toSlice(c);
         const pred = tmp[0];
         const then = tmp[1];
-        const p, e = evaluate(pred, e);
+        const p, e = try evaluate(pred, e);
         if (toBool(p)) return evaluate(then, e);
     }
     return .{ nil(), e };
@@ -192,59 +192,59 @@ fn isNil(x: ValueRef) bool {
 }
 
 // special form
-fn let(pairs: ValueRef, expr: ValueRef, env: Map) EvalResult {
-    const pairsSlice = toSlice(pairs);
+fn let(pairs: ValueRef, expr: ValueRef, env: Map) anyerror!EvalResult {
+    const pairsSlice = try toSlice(pairs);
     const n = pairsSlice.len;
 
-    var keys: [][]const u8 = alloc.alloc([]const u8, n) catch unreachable;
+    var keys: [][]const u8 = try alloc.alloc([]const u8, n);
     defer alloc.free(keys);
-    var vals: []ValueRef = alloc.alloc(ValueRef, n) catch unreachable;
+    var vals: []ValueRef = try alloc.alloc(ValueRef, n);
     defer alloc.free(vals);
 
     for (pairsSlice, 0..) |p, i| {
-        const keyVal = toSlice(p);
+        const keyVal = try toSlice(p);
         keys[i] = keyVal[0].symbol;
         vals[i] = keyVal[1];
     }
 
     // The prior binding is not used to evaluate the following binding,
     // but the result of evaluating the RHS of a prior ones are propagated.
-    var new_env = env.clone() catch unreachable;
-    for (0..vals.len) |i| vals[i], new_env = evaluate(vals[i], new_env);
-    for (keys, vals) |k, v| new_env = putPure(new_env, k, v);
+    var new_env = try env.clone();
+    for (0..vals.len) |i| vals[i], new_env = try evaluate(vals[i], new_env);
+    for (keys, vals) |k, v| new_env = try putPure(new_env, k, v);
     return evaluate(expr, new_env);
 }
 
 // special form
 // The scope is lexical, i.e., the returning 'env' value is a snapshot of the parser's env.
 // TODO: Defun can be rewritten using lambda and macro.
-fn defun(name: ValueRef, params: ValueRef, body: []ValueRef, env: Map) EvalResult {
+fn defun(name: ValueRef, params: ValueRef, body: []ValueRef, env: Map) anyerror!EvalResult {
     var sym_params = std.ArrayList([]const u8).init(alloc);
     {
-        var tmp = toSlice(params);
-        for (tmp) |a| sym_params.append(symbolp(a).?) catch unreachable;
+        var tmp = try toSlice(params);
+        for (tmp) |a| try sym_params.append(symbolp(a).?);
     }
     const sym_name = symbolp(name).?;
-    const func = common.newFunctionValue(
+    const func = try common.newFunctionValue(
         sym_name,
-        sym_params.toOwnedSlice() catch unreachable,
+        try sym_params.toOwnedSlice(),
         body,
         env,
     );
-    return .{ func, putPure(env, sym_name, func) };
+    return .{ func, try putPure(env, sym_name, func) };
 }
 
-fn lambda(params: ValueRef, body: ValueRef, env: Map) EvalResult {
+fn lambda(params: ValueRef, body: ValueRef, env: Map) anyerror!EvalResult {
     var sym_params = std.ArrayList([]const u8).init(alloc);
     {
-        var tmp = toSlice(params);
-        for (tmp) |a| sym_params.append(symbolp(a).?) catch unreachable;
+        var tmp = try toSlice(params);
+        for (tmp) |a| try sym_params.append(symbolp(a).?);
     }
-    var b = alloc.alloc(ValueRef, 1) catch unreachable;
+    var b = try alloc.alloc(ValueRef, 1);
     b[0] = body;
-    const func = common.newFunctionValue(
+    const func = try common.newFunctionValue(
         "lambda",
-        sym_params.toOwnedSlice() catch unreachable,
+        try sym_params.toOwnedSlice(),
         b,
         env,
     );
@@ -252,20 +252,20 @@ fn lambda(params: ValueRef, body: ValueRef, env: Map) EvalResult {
 }
 
 // special form
-fn setq(x: ValueRef, env: Map) EvalResult {
+fn setq(x: ValueRef, env: Map) anyerror!EvalResult {
     if (isNil(x)) return .{ nil(), env }; // TODO: use toSlice
     const sym = symbolp(car(x)).?;
-    const val, var new_env = evaluate(car(cdr(x)), env);
-    new_env.put(sym, val) catch unreachable;
+    const val, var new_env = try evaluate(car(cdr(x)), env);
+    try new_env.put(sym, val);
     return .{ val, new_env };
 }
 
 // special form
-fn progn(x: ValueRef, env: Map) EvalResult {
-    const slice = toSlice(x);
+fn progn(x: ValueRef, env: Map) anyerror!EvalResult {
+    const slice = try toSlice(x);
     var ret = nil();
-    var new_env = env.clone() catch unreachable;
-    for (slice) |p| ret, new_env = evaluate(p, new_env);
+    var new_env = try env.clone();
+    for (slice) |p| ret, new_env = try evaluate(p, new_env);
     return .{ ret, new_env }; // return the last result
 }
 
@@ -280,17 +280,17 @@ fn cdr(x: ValueRef) ValueRef {
 }
 
 // built-in func
-fn cons_(car_: ValueRef, cdr_: ValueRef) ValueRef {
+fn cons_(car_: ValueRef, cdr_: ValueRef) !ValueRef {
     return common.newConsValue(car_, cdr_);
 }
 
 // built-in func
-fn list(xs: []ValueRef) ValueRef {
+fn list(xs: []ValueRef) !ValueRef {
     var ret = nil();
     var i = xs.len;
     while (i > 0) {
         i -= 1;
-        ret = common.newConsValue(xs[i], ret);
+        ret = try common.newConsValue(xs[i], ret);
     }
     return ret;
 }
@@ -320,14 +320,14 @@ fn symbolp(atom: ValueRef) ?[]const u8 {
 }
 
 // built-in func
-fn add(xs: []ValueRef) ValueRef {
+fn add(xs: []ValueRef) !ValueRef {
     var ret: i64 = 0;
     for (xs) |x| ret += numberp(x).?;
     return common.newNumberValue(ret);
 }
 
 // built-in func
-fn sub(xs: []ValueRef) ValueRef {
+fn sub(xs: []ValueRef) !ValueRef {
     var ret: i64 = 0;
     for (xs, 0..) |x, i| {
         if (i == 0) ret += numberp(x).? else ret -= numberp(x).?;
@@ -336,7 +336,7 @@ fn sub(xs: []ValueRef) ValueRef {
 }
 
 // built-in func
-fn mul(xs: []ValueRef) ValueRef {
+fn mul(xs: []ValueRef) !ValueRef {
     var ret: i64 = 1;
     for (xs, 0..) |x, i| {
         if (i == 0) ret *= numberp(x).?;
@@ -345,7 +345,7 @@ fn mul(xs: []ValueRef) ValueRef {
 }
 
 // built-in func
-fn div(xs: []ValueRef) ValueRef {
+fn div(xs: []ValueRef) !ValueRef {
     var ret: i64 = 1;
     for (xs, 0..) |x, i| {
         if (i == 0) ret *= numberp(x).? else ret = @divFloor(ret, numberp(x).?);
@@ -396,8 +396,8 @@ fn geq(x: ValueRef, y: ValueRef) ValueRef {
 }
 
 // built-in func
-fn length(x: ValueRef) ValueRef {
-    const slice = toSlice(x);
+fn length(x: ValueRef) !ValueRef {
+    const slice = try toSlice(x);
     return common.newNumberValue(@intCast(slice.len));
 }
 
@@ -407,10 +407,10 @@ fn null_(x: ValueRef) ValueRef {
 }
 
 // built-in func
-fn print(x: ValueRef) ValueRef {
-    const str = common.toString(x);
+fn print(x: ValueRef) !ValueRef {
+    const str = try common.toString(x);
     const stdout = std.io.getStdOut().writer();
-    nosuspend stdout.print("#print: {s}\n", .{str}) catch unreachable;
+    nosuspend try stdout.print("#print: {s}\n", .{str});
     return x;
 }
 
@@ -438,8 +438,8 @@ pub fn deepEql(x: ValueRef, y: ValueRef) bool {
     }
 }
 
-fn putPure(env: Map, key: []const u8, val: ValueRef) Map {
-    var ret = env.clone() catch unreachable;
-    ret.put(key, val) catch unreachable;
+fn putPure(env: Map, key: []const u8, val: ValueRef) !Map {
+    var ret = try env.clone();
+    try ret.put(key, val);
     return ret;
 }
