@@ -264,6 +264,14 @@ test "tokenize" {
             .code = "(let ((f (lambda (x) (+ x x)))) (f 1))",
             .want = try parse("2"),
         },
+        TestCase{
+            .code = "((lambda (x) (+ x x)) 1)",
+            .want = try parse("2"),
+        },
+        TestCase{
+            .code = @embedFile("examples/fibonacci-lambda.lisp"),
+            .want = try parse("55"),
+        },
     };
 
     std.testing.log_level = std.log.Level.debug;
@@ -271,6 +279,7 @@ test "tokenize" {
         const code = c.code;
         std.log.debug("test {}: {s}", .{ i, code });
         const get, _ = try eval(code, Map.init(alloc));
+        std.log.debug("get: {}", .{get});
         try std.testing.expect(E.deepEql(get, c.want[c.want.len - 1]));
         std.log.info("test result: ok", .{});
     }

@@ -17,20 +17,24 @@ pub const EvalResult = struct { ValueRef, Map };
 pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
     if (isNil(x)) return .{ x, env };
     switch (x.*) {
-        Value.number, Value.function => return .{ x, env },
+        Value.number => return .{ x, env },
+        Value.function => unreachable,
         Value.symbol => |sym| {
             return if (env.get(sym)) |ent| .{ ent, env } else .{ x, env };
         },
         Value.cons => |cons| {
             switch (cons.car.*) {
                 Value.number => @panic("number cannot be a function"),
-                Value.cons => @panic("cons cell cannot be a function"),
+                Value.cons => {
+                    const l, _ = try evaluate(car(x), env);
+                    const ar, _ = try toEvaledSlice(cdr(x), env);
+                    return callFunction(l, ar);
+                },
                 Value.function => @panic("unimplemented"),
                 Value.symbol => |sym| {
                     const eql = std.mem.eql;
 
                     // Special forms.
-                    // TODO: Rewrite some of below by macro.
                     {
                         const args = try toSlice(cdr(x));
                         if (eql(u8, sym, "quote"))
@@ -42,7 +46,7 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
                         if (eql(u8, sym, "defun"))
                             return defun(args[0], args[1], args[2..], env);
                         if (eql(u8, sym, "lambda"))
-                            return lambda(args[0], args[1], env);
+                            return lambda(args[0], args[1..], env);
                         if (eql(u8, sym, "if"))
                             return if_(args[0], args[1], if (args.len >= 3) args[2] else null, env);
                         if (eql(u8, sym, "cond"))
@@ -53,8 +57,15 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
 
                     // User-defined functions.
                     if (env.get(sym)) |func| {
-                        const args, _ = try toEvaledSlice(cdr(x), env);
-                        return callFunction(func, args);
+                        const args, const new_env = try toEvaledSlice(cdr(x), env);
+                        switch (func.*) {
+                            Value.function => return callFunction(func, args),
+                            Value.cons => {
+                                const f, _ = try evaluate(func, new_env);
+                                return callFunction(f, args);
+                            },
+                            else => @panic("symbol not binded to function"),
+                        }
                     }
 
                     // Built-in functions.
@@ -117,18 +128,17 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
 fn callFunction(func: ValueRef, args: []ValueRef) anyerror!EvalResult {
     const f = func.function;
     if (f.params.len != args.len) {
-        std.log.err("wrong number of argument for {s}", .{f.name});
-        @panic("wrong number of arguments");
+        std.log.err("wrong number of argument for {s}", .{f.name orelse "lambda"});
+        @panic("wrong number of arguments for function");
     }
 
-    // Eval arguments.
     var new_env = try f.env.clone();
-
+    // Evaluate arguments.
     // Overwrite env entries if exist.
-    // It means argument name shadows the values with same name in caller's env.
-    // for function name
-    try new_env.put(f.name, func);
-    // for arguments
+    // It means argument name shadows the values with same name at the defined time.
+    // For function name
+    if (f.name) |name| try new_env.put(name, func);
+    // For arguments
     for (f.params, args) |param, arg|
         try new_env.put(param, arg);
 
@@ -210,14 +220,14 @@ fn let(pairs: ValueRef, expr: ValueRef, env: Map) anyerror!EvalResult {
     // The prior binding is not used to evaluate the following binding,
     // but the result of evaluating the RHS of a prior ones are propagated.
     var new_env = try env.clone();
-    for (0..vals.len) |i| vals[i], new_env = try evaluate(vals[i], new_env);
+    for (0..vals.len) |i|
+        vals[i], new_env = try evaluate(vals[i], new_env);
     for (keys, vals) |k, v| new_env = try putPure(new_env, k, v);
     return evaluate(expr, new_env);
 }
 
 // special form
 // The scope is lexical, i.e., the returning 'env' value is a snapshot of the parser's env.
-// TODO: Defun can be rewritten using lambda and macro.
 fn defun(name: ValueRef, params: ValueRef, body: []ValueRef, env: Map) anyerror!EvalResult {
     var sym_params = std.ArrayList([]const u8).init(alloc);
     {
@@ -234,18 +244,16 @@ fn defun(name: ValueRef, params: ValueRef, body: []ValueRef, env: Map) anyerror!
     return .{ func, try putPure(env, sym_name, func) };
 }
 
-fn lambda(params: ValueRef, body: ValueRef, env: Map) anyerror!EvalResult {
+fn lambda(params: ValueRef, body: []ValueRef, env: Map) anyerror!EvalResult {
     var sym_params = std.ArrayList([]const u8).init(alloc);
     {
         var tmp = try toSlice(params);
         for (tmp) |a| try sym_params.append(symbolp(a).?);
     }
-    var b = try alloc.alloc(ValueRef, 1);
-    b[0] = body;
     const func = try common.newFunctionValue(
-        "lambda",
+        null,
         try sym_params.toOwnedSlice(),
-        b,
+        body,
         env,
     );
     return .{ func, env };
@@ -307,7 +315,10 @@ fn atomp(cons: ValueRef) ?ValueRef {
 fn numberp(atom: ValueRef) ?i64 {
     switch (atom.*) {
         Value.number => |num| return num,
-        else => return null,
+        else => {
+            std.log.debug("not a number, {}", .{atom});
+            return null;
+        },
     }
 }
 
@@ -432,7 +443,11 @@ pub fn deepEql(x: ValueRef, y: ValueRef) bool {
             else => return false,
         },
         Value.function => |x_| switch (y.*) {
-            Value.function => |y_| return std.mem.eql(u8, x_.name, y_.name), // just comparing name
+            Value.function => |y_| {
+                if (x_.name != null and y_.name != null) return std.mem.eql(u8, x_.name.?, y_.name.?); // just comparing name
+                if (x_.name == null and y_.name == null) return true;
+                return false;
+            },
             else => return false,
         },
     }

@@ -3,7 +3,7 @@ const std = @import("std");
 pub const Token = @import("tokenize.zig").Token;
 pub const ValueRef = *const Value;
 
-pub const Map = std.StringHashMap(ValueRef);
+pub const Map = std.StringHashMap(ValueRef); // TODO: Dependency for env
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 pub const alloc = gpa.allocator();
@@ -24,8 +24,8 @@ pub fn newCons(car: ValueRef, cdr: ValueRef) !*Cons {
 pub const Value = union(enum) {
     number: i64,
     symbol: []const u8,
-    cons: *Cons,
-    function: *Function,
+    cons: *const Cons,
+    function: *const Function,
 };
 
 pub fn newConsValue(car: ValueRef, cdr: ValueRef) !ValueRef {
@@ -52,8 +52,15 @@ fn newAtomValue(comptime T: type, value: T) !ValueRef {
     return ret;
 }
 
+pub const Function = struct {
+    name: ?[]const u8, // null for lambda
+    params: [][]const u8,
+    body: []ValueRef,
+    env: Map, // captured env (lexical scope)
+};
+
 pub fn newFunctionValue(
-    name: []const u8,
+    name: ?[]const u8,
     params: [][]const u8,
     body: []ValueRef,
     env: Map,
@@ -63,14 +70,7 @@ pub fn newFunctionValue(
     return ret;
 }
 
-pub const Function = struct {
-    name: []const u8,
-    params: [][]const u8,
-    body: []ValueRef, // TODO: Make this single
-    env: Map, // captured env (lexical scope)
-};
-
-pub fn newFunc(name: []const u8, params: [][]const u8, body: []ValueRef, env: Map) !*Function {
+pub fn newFunc(name: ?[]const u8, params: [][]const u8, body: []ValueRef, env: Map) !*Function {
     var ret: *Function = try alloc.create(Function);
     ret.* = Function{
         .name = name,
@@ -126,9 +126,13 @@ fn toStringInner(cell: ValueRef, builder: *std.ArrayList(u8)) anyerror!void {
         },
         Value.symbol => |sym| try builder.appendSlice(sym),
         Value.function => |func| {
-            try builder.appendSlice("<function:");
-            try builder.appendSlice(func.name);
-            try builder.appendSlice(">");
+            if (func.name) |n| {
+                try builder.appendSlice("<function:");
+                try builder.appendSlice(n);
+                try builder.appendSlice(">");
+            } else {
+                try builder.appendSlice("<lambda>");
+            }
         },
     }
 }
