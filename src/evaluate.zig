@@ -42,8 +42,8 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
                         const args = try toSlice(cdr(x));
                         if (eql(u8, sym, "quote"))
                             return .{ args[0], env };
-                        if (eql(u8, sym, "progn"))
-                            return progn(cdr(x), env);
+                        if (eql(u8, sym, "begin"))
+                            return begin(cdr(x), env);
                         if (eql(u8, sym, "setq"))
                             return setq(cdr(x), env);
                         if (eql(u8, sym, "defun"))
@@ -271,8 +271,7 @@ fn setq(x: ValueRef, env: Map) anyerror!EvalResult {
 }
 
 // special form
-// TODO: rename to begin
-fn progn(x: ValueRef, env: Map) anyerror!EvalResult {
+fn begin(x: ValueRef, env: Map) anyerror!EvalResult {
     const slice = try toSlice(x);
     var ret = common.empty();
     var new_env = try env.clone();

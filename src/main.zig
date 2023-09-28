@@ -116,7 +116,7 @@ test "tokenize" {
             .want = try parse("hello"),
         },
         TestCase{
-            .code = "(progn (print hello) (print world) (+ (length '(a b c)) (length '(d e))))",
+            .code = "(begin (print hello) (print world) (+ (length '(a b c)) (length '(d e))))",
             .want = try parse("5"),
         },
         TestCase{
@@ -128,11 +128,11 @@ test "tokenize" {
             .want = try parse("2"),
         },
         TestCase{
-            .code = "(progn (setq a 1) (setq b 2) (+ a b 3))",
+            .code = "(begin (setq a 1) (setq b 2) (+ a b 3))",
             .want = try parse("6"),
         },
         TestCase{
-            .code = "(progn (setq p '(3 1 4 1 5)) (print (length p)))",
+            .code = "(begin (setq p '(3 1 4 1 5)) (print (length p)))",
             .want = try parse("5"),
         },
         TestCase{
@@ -144,23 +144,23 @@ test "tokenize" {
             .want = try parse("(a b)"),
         },
         TestCase{
-            .code = "(progn (setq menu '(tea coffee milk)) (car menu))",
+            .code = "(begin (setq menu '(tea coffee milk)) (car menu))",
             .want = try parse("tea"),
         },
         TestCase{
-            .code = "(progn (setq menu '(tea coffee milk)) (cdr menu))",
+            .code = "(begin (setq menu '(tea coffee milk)) (cdr menu))",
             .want = try parse("(coffee milk)"),
         },
         TestCase{
-            .code = "(progn (setq menu '(tea coffee milk)) (cdr (cdr menu)))",
+            .code = "(begin (setq menu '(tea coffee milk)) (cdr (cdr menu)))",
             .want = try parse("(milk)"),
         },
         TestCase{
-            .code = "(progn (setq menu '(tea coffee milk)) (cdr (cdr (cdr menu))))",
+            .code = "(begin (setq menu '(tea coffee milk)) (cdr (cdr (cdr menu))))",
             .want = try parse("()"),
         },
         TestCase{
-            .code = "(progn (setq menu '(tea coffee milk)) (car (cdr menu)))",
+            .code = "(begin (setq menu '(tea coffee milk)) (car (cdr menu)))",
             .want = try parse("coffee"),
         },
         TestCase{
@@ -168,43 +168,43 @@ test "tokenize" {
             .want = try parse("((a b) c d)"),
         },
         TestCase{
-            .code = "(progn (setq menu '(tea coffee milk)) (cons 'cocoa menu))",
+            .code = "(begin (setq menu '(tea coffee milk)) (cons 'cocoa menu))",
             .want = try parse("(cocoa tea coffee milk)"),
         },
         TestCase{
-            .code = "(progn (setq menu '(tea coffee milk)) (cons 'cocoa (cdr menu)))",
+            .code = "(begin (setq menu '(tea coffee milk)) (cons 'cocoa (cdr menu)))",
             .want = try parse("(cocoa coffee milk)"),
         },
         TestCase{
-            .code = "(progn (setq menu '(tea coffee milk)) (car (cdr (cdr menu))))",
+            .code = "(begin (setq menu '(tea coffee milk)) (car (cdr (cdr menu))))",
             .want = try parse("milk"),
         },
         TestCase{
-            .code = "(progn (setq menu '(tea coffee milk)) (cons 'juice (cdr menu)))",
+            .code = "(begin (setq menu '(tea coffee milk)) (cons 'juice (cdr menu)))",
             .want = try parse("(juice coffee milk)"),
         },
         TestCase{
-            .code = "(progn (setq menu '(tea coffee milk)) (cons (car menu) (cons 'juice (cdr menu))))",
+            .code = "(begin (setq menu '(tea coffee milk)) (cons (car menu) (cons 'juice (cdr menu))))",
             .want = try parse("(tea juice coffee milk)"),
         },
         TestCase{
-            .code = "(progn (setq menu '(tea coffee milk)) (cons (car menu) (cdr (cdr menu))))",
+            .code = "(begin (setq menu '(tea coffee milk)) (cons (car menu) (cdr (cdr menu))))",
             .want = try parse("(tea milk)"),
         },
         TestCase{
-            .code = "(progn (setq menu '(tea coffee milk)) (cons (car (cdr menu)) (cons (car menu) (cdr (cdr menu)))))",
+            .code = "(begin (setq menu '(tea coffee milk)) (cons (car (cdr menu)) (cons (car menu) (cdr (cdr menu)))))",
             .want = try parse("(coffee tea milk)"),
         },
         TestCase{
-            .code = "(progn (defun double (x) (+ x x)) (double 1))",
+            .code = "(begin (defun double (x) (+ x x)) (double 1))",
             .want = try parse("2"),
         },
         TestCase{
-            .code = "(progn (defun double (x) (+ x x)) (double (double 1)))",
+            .code = "(begin (defun double (x) (+ x x)) (double (double 1)))",
             .want = try parse("4"),
         },
         TestCase{
-            .code = "(progn (defun double (x) (+ x x)) (double (double 1)))",
+            .code = "(begin (defun double (x) (+ x x)) (double (double 1)))",
             .want = try parse("4"),
         },
         TestCase{
