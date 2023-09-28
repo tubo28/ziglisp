@@ -4,8 +4,8 @@ const common = @import("common.zig");
 const alloc = common.alloc;
 const Function = common.Function;
 const Map = common.Map;
-const nil = common.nil;
 const t = common.t;
+const f = common.f;
 const toString = common.toString;
 const ValueRef = common.ValueRef;
 const Value = common.Value;
@@ -15,7 +15,6 @@ const Token = @import("tokenize.zig").Token;
 pub const EvalResult = struct { ValueRef, Map };
 
 pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
-    if (isNil(x)) return .{ x, env };
     switch (x.*) {
         Value.number => return .{ x, env },
         Value.function => unreachable,
@@ -23,6 +22,10 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
             return if (env.get(sym)) |ent| .{ ent, env } else .{ x, env };
         },
         Value.cons => |cons| {
+            if (x == common.empty()) {
+                std.log.err("empty list cannot be evaluated", .{});
+                unreachable;
+            }
             switch (cons.car.*) {
                 Value.number => @panic("number cannot be a function"),
                 Value.cons => {
@@ -61,8 +64,8 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
                         switch (func.*) {
                             Value.function => return callFunction(func, args),
                             Value.cons => {
-                                const f, _ = try evaluate(func, new_env);
-                                return callFunction(f, args);
+                                const ef, _ = try evaluate(func, new_env);
+                                return callFunction(ef, args);
                             },
                             else => @panic("symbol not binded to function"),
                         }
@@ -73,7 +76,7 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
                     builtin: {
                         // Traverse the list of built-in functions to check the existence of function
                         // in order not to call toEvaledSlice meaninglessly.
-                        const names = [_][]const u8{ "car", "cdr", "cons", "list", "print", "+", "-", "*", "/", "=", "<", "<=", ">", ">=", "or", "and", "length", "null" };
+                        const names = [_][]const u8{ "car", "cdr", "cons", "list", "print", "+", "-", "*", "/", "=", "<", "<=", ">", ">=", "or", "and", "length", "null?" };
                         var found = false;
                         for (names) |n| found = found or eql(u8, sym, n);
                         if (!found) break :builtin;
@@ -113,7 +116,7 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
                             return .{ and_(args), new_env };
                         if (eql(u8, sym, "length"))
                             return .{ try length(args[0]), new_env };
-                        if (eql(u8, sym, "null"))
+                        if (eql(u8, sym, "null?"))
                             return .{ null_(args[0]), new_env };
                     }
 
@@ -125,26 +128,27 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
     }
 }
 
-fn callFunction(func: ValueRef, args: []ValueRef) anyerror!EvalResult {
-    const f = func.function;
-    if (f.params.len != args.len) {
-        std.log.err("wrong number of argument for {s}", .{f.name orelse "lambda"});
+fn callFunction(x: ValueRef, args: []ValueRef) anyerror!EvalResult {
+    const func = x.function;
+    if (func.params.len != args.len) {
+        std.log.err("wrong number of argument for {s}", .{func.name orelse "lambda"});
         @panic("wrong number of arguments for function");
     }
 
-    var new_env = try f.env.clone();
+    var new_env = try func.env.clone();
     // Evaluate arguments.
     // Overwrite env entries if exist.
     // It means argument name shadows the values with same name at the defined time.
     // For function name
-    if (f.name) |name| try new_env.put(name, func);
+    if (func.name) |name| try new_env.put(name, x);
     // For arguments
-    for (f.params, args) |param, arg|
+    for (func.params, args) |param, arg|
         try new_env.put(param, arg);
 
     // Eval body.
-    var ret = nil();
-    for (f.body) |expr| ret, new_env = try evaluate(expr, new_env);
+    std.debug.assert(func.body.len != 0);
+    var ret: ValueRef = undefined;
+    for (func.body) |expr| ret, new_env = try evaluate(expr, new_env);
     return .{ ret, new_env };
 }
 
@@ -152,7 +156,7 @@ fn callFunction(func: ValueRef, args: []ValueRef) anyerror!EvalResult {
 fn toSlice(head: ValueRef) ![]ValueRef {
     var ret = std.ArrayList(ValueRef).init(alloc); // defer deinit?
     var h = head;
-    while (h != nil()) {
+    while (h != common.empty()) {
         const x = car(h);
         ret.append(x) catch @panic("cannot append");
         h = cdr(h);
@@ -171,8 +175,8 @@ fn toEvaledSlice(head: ValueRef, env: Map) !struct { []ValueRef, Map } {
 fn if_(pred: ValueRef, then: ValueRef, unless: ?ValueRef, env: Map) anyerror!EvalResult {
     const p, const new_env = try evaluate(pred, env);
     if (toBool(p)) return try evaluate(then, new_env);
-    if (unless) |f| return try evaluate(f, new_env);
-    return .{ nil(), new_env };
+    if (unless) |u| return try evaluate(u, new_env);
+    return .{ common.empty(), new_env }; // Return empty if pred is false and unless is not given.
 }
 
 // special form
@@ -185,20 +189,15 @@ fn cond(clauses: []ValueRef, env: Map) anyerror!EvalResult {
         const p, e = try evaluate(pred, e);
         if (toBool(p)) return evaluate(then, e);
     }
-    return .{ nil(), e };
+    return .{ common.empty(), e }; // Return empty if all pred is false.
 }
 
 fn toBool(x: ValueRef) bool {
-    return !isNil(x);
+    return !isF(x);
 }
 
-// TODO: rename this to null_
-fn isNil(x: ValueRef) bool {
-    if (x == nil()) return true;
-    switch (x.*) {
-        Value.cons => |cons| if (cons.car == nil() and cons.cdr == nil()) return true else return false,
-        else => return false,
-    }
+fn isF(x: ValueRef) bool {
+    return x == common.f();
 }
 
 // special form
@@ -229,6 +228,8 @@ fn let(pairs: ValueRef, expr: ValueRef, env: Map) anyerror!EvalResult {
 // special form
 // The scope is lexical, i.e., the returning 'env' value is a snapshot of the parser's env.
 fn defun(name: ValueRef, params: ValueRef, body: []ValueRef, env: Map) anyerror!EvalResult {
+    std.debug.assert(body.len != 0); // Ill-formed special form
+
     var sym_params = std.ArrayList([]const u8).init(alloc);
     {
         var tmp = try toSlice(params);
@@ -261,17 +262,19 @@ fn lambda(params: ValueRef, body: []ValueRef, env: Map) anyerror!EvalResult {
 
 // special form
 fn setq(x: ValueRef, env: Map) anyerror!EvalResult {
-    if (isNil(x)) return .{ nil(), env }; // TODO: use toSlice
-    const sym = symbolp(car(x)).?;
-    const val, var new_env = try evaluate(car(cdr(x)), env);
+    const slice = try toSlice(x);
+    if (slice.len != 2) @panic("argument for setq was not 2");
+    const sym = symbolp(slice[0]).?;
+    const val, var new_env = try evaluate(slice[1], env);
     try new_env.put(sym, val);
     return .{ val, new_env };
 }
 
 // special form
+// TODO: rename to begin
 fn progn(x: ValueRef, env: Map) anyerror!EvalResult {
     const slice = try toSlice(x);
-    var ret = nil();
+    var ret = common.empty();
     var new_env = try env.clone();
     for (slice) |p| ret, new_env = try evaluate(p, new_env);
     return .{ ret, new_env }; // return the last result
@@ -294,7 +297,7 @@ fn cons_(car_: ValueRef, cdr_: ValueRef) !ValueRef {
 
 // built-in func
 fn list(xs: []ValueRef) !ValueRef {
-    var ret = nil();
+    var ret = common.empty();
     var i = xs.len;
     while (i > 0) {
         i -= 1;
@@ -367,43 +370,43 @@ fn div(xs: []ValueRef) !ValueRef {
 // built-in func
 fn or_(xs: []ValueRef) ValueRef {
     for (xs) |x| if (toBool(x)) return t();
-    return nil();
+    return f();
 }
 
 // built-in func
 fn and_(xs: []ValueRef) ValueRef {
-    for (xs) |x| if (!toBool(x)) return nil();
+    for (xs) |x| if (!toBool(x)) return f();
     return t();
 }
 
 // built-in func
 fn eq(x: ValueRef, y: ValueRef) ValueRef {
     if (deepEql(x, y)) return t();
-    return nil();
+    return f();
 }
 
-fn boolAsSymbol(x: bool) ValueRef {
-    return if (x) t() else nil();
+fn toValue(x: bool) ValueRef {
+    return if (x) t() else common.f();
 }
 
 // built-in func
 fn le(x: ValueRef, y: ValueRef) ValueRef {
-    return boolAsSymbol(x.number < y.number);
+    return toValue(x.number < y.number);
 }
 
 // built-in func
 fn leq(x: ValueRef, y: ValueRef) ValueRef {
-    return boolAsSymbol(x.number <= y.number);
+    return toValue(x.number <= y.number);
 }
 
 // built-in func
 fn ge(x: ValueRef, y: ValueRef) ValueRef {
-    return boolAsSymbol(x.number > y.number);
+    return toValue(x.number > y.number);
 }
 
 // built-in func
 fn geq(x: ValueRef, y: ValueRef) ValueRef {
-    return boolAsSymbol(x.number > y.number);
+    return toValue(x.number > y.number);
 }
 
 // built-in func
@@ -414,7 +417,7 @@ fn length(x: ValueRef) !ValueRef {
 
 // built-in func
 fn null_(x: ValueRef) ValueRef {
-    return boolAsSymbol(isNil(x));
+    return toValue(x == common.empty());
 }
 
 // built-in func
@@ -428,7 +431,7 @@ fn print(x: ValueRef) !ValueRef {
 /// The "deep equal" function for values.
 /// Equality of function values are only based on the names.
 pub fn deepEql(x: ValueRef, y: ValueRef) bool {
-    if (x == nil() or y == nil()) return x == y;
+    if (x == common.empty() or y == common.empty()) return x == y;
     switch (x.*) {
         Value.number => |x_| switch (y.*) {
             Value.number => |y_| return x_ == y_,

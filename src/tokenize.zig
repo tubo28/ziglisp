@@ -14,7 +14,7 @@ pub const TokenKind = union(enum) {
     left, // (
     right, // )
     quote, // '
-    nil, // nil
+    f, // #f
 };
 
 fn isSymbolChar(c: u8) bool {
@@ -78,8 +78,8 @@ pub fn tokenize(code: []const u8) ![]const Token {
                 i += 1;
             const sym = code[begin..i];
             // special symbol
-            if (std.mem.eql(u8, sym, "nil")) {
-                try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind.nil });
+            if (std.mem.eql(u8, sym, "#f")) {
+                try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind.f });
                 continue;
             }
             try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind{ .symbol = sym } });

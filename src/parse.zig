@@ -7,7 +7,6 @@ const TokenKind = @import("tokenize.zig").TokenKind;
 const common = @import("common.zig");
 const Value = common.Value;
 const ValueRef = common.ValueRef;
-const nil = common.nil;
 
 // parse returns list of s-expr.
 pub fn parse(tokens: []const Token) ![]ValueRef {
@@ -42,7 +41,7 @@ fn parseSExpr(tokens: []const Token) anyerror!struct { ValueRef, []const Token }
             const value, const rest = try parseSExpr(tail);
             const quote = try common.newSymbolValue("quote");
             return .{
-                try common.newConsValue(quote, try common.newConsValue(value, nil())),
+                try common.newConsValue(quote, try common.newConsValue(value, common.empty())),
                 rest,
             };
         },
@@ -55,17 +54,17 @@ fn parseSExpr(tokens: []const Token) anyerror!struct { ValueRef, []const Token }
             return .{ atom, tokens[1..] };
         },
         TokenKind.right => @panic("unbalanced parens"),
-        TokenKind.nil => return .{ nil(), tokens[1..] },
+        TokenKind.f => return .{ common.f(), tokens[1..] },
     }
 }
 
 // Parse sequence of s-expression based on BFN below.
 // <S-expr>*
 fn parseList(tokens: []const Token) anyerror!struct { ValueRef, []const Token } {
-    if (tokens.len == 0) return .{ nil(), tokens };
+    if (tokens.len == 0) return .{ common.empty(), tokens };
 
     switch (tokens[0].kind) {
-        TokenKind.right => return .{ nil(), tokens },
+        TokenKind.right => return .{ common.empty(), tokens },
         else => {
             // Parse first S-expr
             const car, var rest = try parseSExpr(tokens);

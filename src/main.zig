@@ -4,7 +4,6 @@ const V = common.ValueRef;
 const Map = common.Map;
 
 const common = @import("common.zig");
-const nil = common.nil;
 const toString = common.toString;
 const alloc = common.alloc;
 const Value = common.Value;
@@ -69,7 +68,7 @@ fn readLine(reader: anytype) !?[]const u8 {
 fn eval(code: []const u8, env: Map) !struct { V, Map } {
     const tokens = try T.tokenize(code);
     const sexprs = try P.parse(tokens);
-    var ret = nil();
+    var ret = common.empty();
     var new_env = try env.clone();
     for (sexprs) |expr| ret, new_env = try E.evaluate(expr, new_env);
     // std.log.debug("eval result: {s}", .{tos(ret)});
@@ -158,7 +157,7 @@ test "tokenize" {
         },
         TestCase{
             .code = "(progn (setq menu '(tea coffee milk)) (cdr (cdr (cdr menu))))",
-            .want = try parse("nil"),
+            .want = try parse("()"),
         },
         TestCase{
             .code = "(progn (setq menu '(tea coffee milk)) (car (cdr menu)))",
@@ -217,20 +216,16 @@ test "tokenize" {
             .want = try parse("true"),
         },
         TestCase{
-            .code = "(if nil 'true 'false)",
+            .code = "(if #f 'true 'false)",
             .want = try parse("false"),
         },
         TestCase{
-            .code = "(if () 'true 'false)",
-            .want = try parse("false"),
-        },
-        TestCase{
-            .code = "(if t 'true)",
+            .code = "(if #t 'true)",
             .want = try parse("true"),
         },
         TestCase{
-            .code = "(if nil 'true)",
-            .want = try parse("nil"),
+            .code = "(if #f 'true)",
+            .want = try parse("()"),
         },
         TestCase{
             .code = @embedFile("examples/fibonacci.lisp"),
@@ -250,7 +245,7 @@ test "tokenize" {
         },
         TestCase{
             .code = "(cond ((= 0 1) 'foo) ((= 0 2) 'bar))",
-            .want = try parse("nil"),
+            .want = try parse("()"),
         },
         TestCase{
             .code = @embedFile("examples/mergesort.lisp"),
@@ -269,7 +264,7 @@ test "tokenize" {
             .want = try parse("2"),
         },
         TestCase{
-            .code = @embedFile("examples/fibonacci-lambda.lisp"),
+            .code = @embedFile("examples/y-comb.lisp"),
             .want = try parse("55"),
         },
     };

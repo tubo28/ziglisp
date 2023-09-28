@@ -81,22 +81,33 @@ pub fn newFunc(name: ?[]const u8, params: [][]const u8, body: []ValueRef, env: M
     return ret;
 }
 
-var nil_opt: ?*Value = null;
+var empty_opt: ?*Value = null;
 var t_opt: ?*Value = null;
+var f_opt: ?*Value = null;
 
-/// nil is a ConsCell such that both its car and cdr are itself.
-pub fn nil() ValueRef {
-    if (nil_opt) |n| return n;
-    var n = alloc.create(Value) catch @panic("failed to alloc nil");
-    n.* = Value{ .cons = newCons(n, n) catch @panic("failed to alloc cons of nil") };
-    nil_opt = n;
-    return nil_opt.?;
+/// empty is a ConsCell such that both its car and cdr are itself.
+pub fn empty() ValueRef {
+    if (empty_opt) |e| return e;
+    var e = alloc.create(Value) catch @panic("failed to alloc nil");
+    e.* = Value{ .cons = newCons(e, e) catch @panic("failed to alloc cons of nil") };
+    empty_opt = e;
+    return empty_opt.?;
 }
 
+pub fn f() ValueRef {
+    if (f_opt) |ff| return ff;
+    var f_ = alloc.create(Value) catch @panic("failed to alloc #f");
+    f_.* = Value{ .symbol = "#f" };
+    f_opt = f_;
+    return f_opt.?;
+}
+
+// #t.
+// #t is just a non-special symbol in Scheme but useful to implement interpreter.
 pub fn t() ValueRef {
     if (t_opt) |tt| return tt;
-    var t_ = alloc.create(Value) catch @panic("failed to alloc t");
-    t_.* = Value{ .symbol = "t" };
+    var t_ = alloc.create(Value) catch @panic("failed to alloc #t");
+    t_.* = Value{ .symbol = "#t" };
     t_opt = t_;
     return t_opt.?;
 }
@@ -109,10 +120,6 @@ pub fn toString(cell: ValueRef) ![]const u8 {
 }
 
 fn toStringInner(cell: ValueRef, builder: *std.ArrayList(u8)) anyerror!void {
-    if (cell == nil()) {
-        try builder.appendSlice("nil");
-        return;
-    }
     switch (cell.*) {
         Value.cons => try consToString(cell, builder),
         Value.number => |num| {
@@ -144,7 +151,7 @@ fn consToString(x: ValueRef, builder: *std.ArrayList(u8)) !void {
             try builder.append('(');
             var head = x;
             var first = true;
-            while (head != nil()) {
+            while (head != empty()) {
                 if (consOpt(head)) |c| {
                     if (!first) try builder.append(' ');
                     first = false;

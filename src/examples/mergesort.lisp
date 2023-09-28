@@ -1,13 +1,13 @@
 (defun append (list1 list2)
   (cond
-    ((null list1) list2)
-    (t (cons (car list1) (append (cdr list1) list2)))))
+    ((null? list1) list2)
+    (#t (cons (car list1) (append (cdr list1) list2)))))
 
 (defun subseq (lst begin end)
   (cond
-    ((or (null lst) (<= end 0)) '())
+    ((or (null? lst) (<= end 0)) '())
     ((> begin 0) (subseq (cdr lst) (- begin 1) (- end 1)))
-    (t (cons (car lst) (subseq (cdr lst) 0 (- end 1))))))
+    (#t (cons (car lst) (subseq (cdr lst) 0 (- end 1))))))
 
 (defun merge (f s)
   (cond
@@ -21,7 +21,7 @@
   (let ((len (length lst)))
     (cond
       ((= len 1) lst)
-      (t
+      (#t
       (merge (merge-sort (subseq lst 0 (/ len 2)))
               (merge-sort (subseq lst (/ len 2) len)))))))
 
