@@ -96,7 +96,7 @@ pub fn empty() ValueRef {
     return empty_opt.?;
 }
 
-fn emptyCons() ValueRef {
+fn emptyCons() *const Cons {
     _ = empty();
     return empty_cons_opt.?;
 }

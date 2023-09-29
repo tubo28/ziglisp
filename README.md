@@ -76,6 +76,13 @@ Basically respecting [R5RS Scheme](https://docs.racket-lang.org/r5rs/r5rs-std/).
     * `let`
     * `quote`
 
+## TODOs
+
+- [x] Lambda.
+- [ ] Macro syntax.
+- [ ] Represent environment by tree structure.
+- [ ] GC.
+
 ## License
 
 [MIT](https://choosealicense.com/licenses/mit/)
