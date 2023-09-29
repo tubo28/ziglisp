@@ -29,9 +29,9 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
             switch (cons.car.*) {
                 Value.number => @panic("number cannot be a function"),
                 Value.cons => {
-                    const l, _ = try evaluate(car(x), env);
-                    const ar, _ = try toEvaledSlice(cdr(x), env);
-                    return callFunction(l, ar);
+                    const l, var new_env = try evaluate(car(x), env);
+                    const ar, new_env = try toEvaledSlice(cdr(x), new_env);
+                    return .{ try callFunction(l, ar), new_env };
                 },
                 Value.function => @panic("unimplemented"),
                 Value.symbol => |sym| {
@@ -60,10 +60,10 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
                     if (env.get(sym)) |func| {
                         const args, const new_env = try toEvaledSlice(cdr(x), env);
                         switch (func.*) {
-                            Value.function => return callFunction(func, args),
+                            Value.function => return .{ try callFunction(func, args), env },
                             Value.cons => {
                                 const ef, _ = try evaluate(func, new_env);
-                                return callFunction(ef, args);
+                                return .{ try callFunction(ef, args), env };
                             },
                             else => @panic("symbol not binded to function"),
                         }
@@ -74,7 +74,7 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
                     builtin: {
                         // Traverse the list of built-in functions to check the existence of function
                         // in order not to call toEvaledSlice meaninglessly.
-                        const names = [_][]const u8{ "car", "cdr", "cons", "list", "print", "+", "-", "*", "/", "=", "<", "<=", ">", ">=", "or", "and", "length", "null?" };
+                        const names = [_][]const u8{ "car", "cdr", "cons", "list", "print", "+", "-", "*", "=", "<", "<=", ">", ">=", "or", "and", "length", "null?", "quotient", "modulo" };
                         var found = false;
                         for (names) |n| found = found or eql(u8, sym, n);
                         if (!found) break :builtin;
@@ -96,8 +96,10 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
                             return .{ try sub(args), new_env };
                         if (eql(u8, sym, "*"))
                             return .{ try mul(args), new_env };
-                        if (eql(u8, sym, "/"))
-                            return .{ try div(args), new_env };
+                        if (eql(u8, sym, "quotient"))
+                            return .{ try quotient(args), new_env };
+                        if (eql(u8, sym, "modulo"))
+                            return .{ try modulo(args), new_env };
                         if (eql(u8, sym, "="))
                             return .{ eq(args[0], args[1]), new_env };
                         if (eql(u8, sym, "<"))
@@ -126,7 +128,7 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
     }
 }
 
-fn callFunction(x: ValueRef, args: []ValueRef) anyerror!EvalResult {
+fn callFunction(x: ValueRef, args: []ValueRef) anyerror!ValueRef {
     const func = x.function;
     if (func.params.len != args.len) {
         std.log.err("wrong number of argument for {s}", .{func.name orelse "lambda"});
@@ -147,7 +149,7 @@ fn callFunction(x: ValueRef, args: []ValueRef) anyerror!EvalResult {
     std.debug.assert(func.body.len != 0);
     var ret: ValueRef = undefined;
     for (func.body) |expr| ret, new_env = try evaluate(expr, new_env);
-    return .{ ret, new_env };
+    return ret;
 }
 
 // Convert sequence of cons cell like (foo bar buz) to slice.
@@ -351,12 +353,17 @@ fn mul(xs: []ValueRef) !ValueRef {
 }
 
 // built-in func
-fn div(xs: []ValueRef) !ValueRef {
-    var ret: i64 = 1;
-    for (xs, 0..) |x, i| {
-        if (i == 0) ret *= numberp(x).? else ret = @divFloor(ret, numberp(x).?);
-    }
-    return common.newNumberValue(ret);
+fn quotient(xs: []ValueRef) !ValueRef {
+    const a = numberp(xs[0]).?;
+    const b = numberp(xs[1]).?;
+    return common.newNumberValue(@divFloor(a, b));
+}
+
+// built-in func
+fn modulo(xs: []ValueRef) !ValueRef {
+    const a = numberp(xs[0]).?;
+    const b = numberp(xs[1]).?;
+    return common.newNumberValue(@mod(a, b));
 }
 
 // built-in func

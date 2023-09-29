@@ -11,7 +11,7 @@
     (cond
       ((= len 1) lst)
       (#t
-      (merge (merge-sort (subsequence lst 0 (/ len 2)))
-              (merge-sort (subsequence lst (/ len 2) len)))))))
+      (merge (merge-sort (subsequence lst 0 (quotient len 2)))
+              (merge-sort (subsequence lst (quotient len 2) len)))))))
 
 (merge-sort '(3 1 4 1 5 9 2 6 5 3 5 8 9 7 9))

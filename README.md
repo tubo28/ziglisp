@@ -46,10 +46,11 @@ Developed under Zig version 0.12.0-dev.494+a8d2ed806.
 
 ### Built-in functions and special forms
 
+Basically respecting [R5RS Scheme](https://docs.racket-lang.org/r5rs/r5rs-std/).
+
 * Functions
     * `-`
     * `*`
-    * `/`
     * `+`
     * `<`
     * `<=`
@@ -62,15 +63,17 @@ Developed under Zig version 0.12.0-dev.494+a8d2ed806.
     * `cons`
     * `length`
     * `list`
-    * `null`
+    * `modulo`
+    * `null?`
     * `or`
     * `print`
+    * `quotient`
 * Special forms:
+    * `begin`
     * `cond`
-    * `defun`
+    * `define`
     * `if`
     * `let`
-    * `progn`
     * `quote`
 
 ## License
