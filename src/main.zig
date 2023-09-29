@@ -22,8 +22,6 @@ pub fn main() !void {
 }
 
 fn evalFile(filepath: []const u8) !void {
-    const stdout = std.io.getStdOut().writer();
-
     var file = try std.fs.cwd().openFile(filepath, .{});
     defer file.close();
 
@@ -32,16 +30,15 @@ fn evalFile(filepath: []const u8) !void {
 
     var buf: [65536]u8 = undefined;
     const size = try in_stream.readAll(&buf);
-    var env = Map.init(common.alloc);
-    const result, _ = try eval(buf[0..size], env);
-    try stdout.print("{s}\n", .{try toString(result)});
+    var env = try evalBuiltin();
+    _ = try eval(buf[0..size], env);
 }
 
 fn repl() !void {
     const stdin = std.io.getStdIn().reader();
     const stdout = std.io.getStdOut().writer();
 
-    var env = Map.init(alloc);
+    var env = try evalBuiltin();
     while (true) {
         try stdout.print(">>> ", .{});
         const line = readLine(stdin) catch |err| switch (err) {
@@ -73,6 +70,16 @@ fn eval(code: []const u8, env: Map) !struct { V, Map } {
     for (sexprs) |expr| ret, new_env = try E.evaluate(expr, new_env);
     // std.log.debug("eval result: {s}", .{tos(ret)});
     return .{ ret, new_env };
+}
+
+fn evalBuiltin() !Map {
+    const code = @embedFile("builtin.scm");
+    const tokens = try T.tokenize(code);
+    const sexprs = try P.parse(tokens);
+    var ret = common.empty();
+    var new_env = Map.init(alloc);
+    for (sexprs) |expr| ret, new_env = try E.evaluate(expr, new_env);
+    return new_env;
 }
 
 fn parse(code: []const u8) ![]V {
@@ -217,7 +224,7 @@ test "tokenize" {
         },
         TestCase{
             .code = @embedFile("examples/y-comb2.scm"),
-            .want = try parse("55"),
+            .want = try parse("(1 1 2 3 5 8 13 21 34 55 89 144 233 377 610 987 1597 2584 4181 6765 10946)"),
         },
     };
 
@@ -225,7 +232,7 @@ test "tokenize" {
     for (cases, 1..) |c, i| {
         const code = c.code;
         std.log.debug("test {}: {s}", .{ i, code });
-        const get, _ = try eval(code, Map.init(alloc));
+        const get, _ = try eval(code, try evalBuiltin());
         std.log.debug("get: {}", .{get});
         try std.testing.expect(E.deepEql(get, c.want[c.want.len - 1]));
         std.log.info("test result: ok", .{});

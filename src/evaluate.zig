@@ -232,9 +232,7 @@ fn defineFunction(params: ValueRef, body: []ValueRef, env: Map) anyerror!EvalRes
     const name = slice[0];
 
     var sym_params = std.ArrayList([]const u8).init(alloc);
-    {
-        for (slice[1..]) |arg| try sym_params.append(symbolp(arg).?);
-    }
+    for (slice[1..]) |arg| try sym_params.append(symbolp(arg).?);
     const sym_name = symbolp(name).?;
     const func = try common.newFunctionValue(
         sym_name,
