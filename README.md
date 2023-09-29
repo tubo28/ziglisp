@@ -7,7 +7,7 @@ Disclaimer: the author make it for his own learning Zig purposes, so the quality
 ## Usage
 
 * `zig run src/main.zig` to start REPL.
-* `zig run src/main.zig -- src/examples/mergesort.lisp` to evaluate file.
+* `zig run src/main.zig -- src/examples/mergesort.scm` to evaluate file.
 
 ```
 $ zig run src/main.zig
@@ -18,7 +18,7 @@ $ zig run src/main.zig
 ```
 
 ```
-$ cat src/examples/y-comb.lisp 
+$ cat src/examples/y-comb.scm 
 (let ((f (lambda (fib)
            (lambda (n)
              (cond ((= n 0) 0)
@@ -28,7 +28,7 @@ $ cat src/examples/y-comb.lisp
            ((lambda (x) (f (lambda (m) ((x x) m))))
             (lambda (x) (f (lambda (m) ((x x) m))))))))
   ((y f) 10)) ; The 10th fibonacci number
-$ zig run src/main.zig -- src/examples/y-comb.lisp 
+$ zig run src/main.zig -- src/examples/y-comb.scm 
 55
 ```
 

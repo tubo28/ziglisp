@@ -176,7 +176,7 @@ test "tokenize" {
             .want = try parse("()"),
         },
         TestCase{
-            .code = @embedFile("examples/fibonacci.lisp"),
+            .code = @embedFile("examples/fibonacci.scm"),
             .want = try parse("89"),
         },
         TestCase{
@@ -196,11 +196,11 @@ test "tokenize" {
             .want = try parse("()"),
         },
         TestCase{
-            .code = @embedFile("examples/mergesort.lisp"),
+            .code = @embedFile("examples/mergesort.scm"),
             .want = try parse("(1 1 2 3 3 4 5 5 5 6 7 8 9 9 9)"),
         },
         TestCase{
-            .code = @embedFile("examples/tarai.lisp"),
+            .code = @embedFile("examples/tarai.scm"),
             .want = try parse("8"),
         },
         TestCase{
@@ -212,11 +212,11 @@ test "tokenize" {
             .want = try parse("2"),
         },
         TestCase{
-            .code = @embedFile("examples/y-comb.lisp"),
+            .code = @embedFile("examples/y-comb.scm"),
             .want = try parse("55"),
         },
         TestCase{
-            .code = @embedFile("examples/y-comb2.lisp"),
+            .code = @embedFile("examples/y-comb2.scm"),
             .want = try parse("55"),
         },
     };
