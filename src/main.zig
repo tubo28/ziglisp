@@ -140,19 +140,19 @@ test "tokenize" {
             .want = try parse("(milk)"),
         },
         TestCase{
-            .code = "(begin (defun x () 1) (x))",
+            .code = "(begin (define (x) 1) (x))",
             .want = try parse("1"),
         },
         TestCase{
-            .code = "(begin (defun double (x) (+ x x)) (double 1))",
+            .code = "(begin (define (double x) (+ x x)) (double 1))",
             .want = try parse("2"),
         },
         TestCase{
-            .code = "(begin (defun double (x) (+ x x)) (double (double 1)))",
+            .code = "(begin (define (double x) (+ x x)) (double (double 1)))",
             .want = try parse("4"),
         },
         TestCase{
-            .code = "(begin (defun double (x) (+ x x)) (double (double 1)))",
+            .code = "(define (double x) (+ x x)) (double (double 1))",
             .want = try parse("4"),
         },
         TestCase{

@@ -44,8 +44,8 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
                             return .{ args[0], env };
                         if (eql(u8, sym, "begin"))
                             return begin(cdr(x), env);
-                        if (eql(u8, sym, "defun")) // TODO: define
-                            return defun(args[0], args[1], args[2..], env);
+                        if (eql(u8, sym, "define"))
+                            return defineFunction(args[0], args[1..], env);
                         if (eql(u8, sym, "lambda"))
                             return lambda(args[0], args[1..], env);
                         if (eql(u8, sym, "if"))
@@ -224,14 +224,16 @@ fn let(pairs: ValueRef, expr: ValueRef, env: Map) anyerror!EvalResult {
 }
 
 // special form
+// (define (head args) body ...+)
 // The scope is lexical, i.e., the returning 'env' value is a snapshot of the parser's env.
-fn defun(name: ValueRef, params: ValueRef, body: []ValueRef, env: Map) anyerror!EvalResult {
+fn defineFunction(params: ValueRef, body: []ValueRef, env: Map) anyerror!EvalResult {
     std.debug.assert(body.len != 0); // Ill-formed special form
+    const slice = try toSlice(params);
+    const name = slice[0];
 
     var sym_params = std.ArrayList([]const u8).init(alloc);
     {
-        var tmp = try toSlice(params);
-        for (tmp) |a| try sym_params.append(symbolp(a).?);
+        for (slice[1..]) |arg| try sym_params.append(symbolp(arg).?);
     }
     const sym_name = symbolp(name).?;
     const func = try common.newFunctionValue(
@@ -241,6 +243,11 @@ fn defun(name: ValueRef, params: ValueRef, body: []ValueRef, env: Map) anyerror!
         env,
     );
     return .{ func, try putPure(env, sym_name, func) };
+}
+
+// (define id expr)
+fn defineValue() anyerror!ValueRef {
+    unreachable;
 }
 
 fn lambda(params: ValueRef, body: []ValueRef, env: Map) anyerror!EvalResult {
