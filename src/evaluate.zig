@@ -44,9 +44,7 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
                             return .{ args[0], env };
                         if (eql(u8, sym, "begin"))
                             return begin(cdr(x), env);
-                        if (eql(u8, sym, "setq"))
-                            return setq(cdr(x), env);
-                        if (eql(u8, sym, "defun"))
+                        if (eql(u8, sym, "defun")) // TODO: define
                             return defun(args[0], args[1], args[2..], env);
                         if (eql(u8, sym, "lambda"))
                             return lambda(args[0], args[1..], env);
@@ -258,16 +256,6 @@ fn lambda(params: ValueRef, body: []ValueRef, env: Map) anyerror!EvalResult {
         env,
     );
     return .{ func, env };
-}
-
-// special form
-fn setq(x: ValueRef, env: Map) anyerror!EvalResult {
-    const slice = try toSlice(x);
-    if (slice.len != 2) @panic("argument for setq was not 2");
-    const sym = symbolp(slice[0]).?;
-    const val, var new_env = try evaluate(slice[1], env);
-    try new_env.put(sym, val);
-    return .{ val, new_env };
 }
 
 // special form

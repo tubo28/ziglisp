@@ -120,22 +120,6 @@ test "tokenize" {
             .want = try parse("5"),
         },
         TestCase{
-            .code = "(setq menu '(tea coffee milk))",
-            .want = try parse("(tea coffee milk)"),
-        },
-        TestCase{
-            .code = "(setq a 1) (+ a a)",
-            .want = try parse("2"),
-        },
-        TestCase{
-            .code = "(begin (setq a 1) (setq b 2) (+ a b 3))",
-            .want = try parse("6"),
-        },
-        TestCase{
-            .code = "(begin (setq p '(3 1 4 1 5)) (print (length p)))",
-            .want = try parse("5"),
-        },
-        TestCase{
             .code = "(car '(a b c))",
             .want = try parse("a"),
         },
@@ -144,56 +128,20 @@ test "tokenize" {
             .want = try parse("(a b)"),
         },
         TestCase{
-            .code = "(begin (setq menu '(tea coffee milk)) (car menu))",
+            .code = "(let ((menu '(tea coffee milk))) (car menu))",
             .want = try parse("tea"),
         },
         TestCase{
-            .code = "(begin (setq menu '(tea coffee milk)) (cdr menu))",
+            .code = "(let ((menu '(tea coffee milk))) (cdr menu))",
             .want = try parse("(coffee milk)"),
         },
         TestCase{
-            .code = "(begin (setq menu '(tea coffee milk)) (cdr (cdr menu)))",
+            .code = "(let ((menu '(tea coffee milk))) (cdr (cdr menu)))",
             .want = try parse("(milk)"),
         },
         TestCase{
-            .code = "(begin (setq menu '(tea coffee milk)) (cdr (cdr (cdr menu))))",
-            .want = try parse("()"),
-        },
-        TestCase{
-            .code = "(begin (setq menu '(tea coffee milk)) (car (cdr menu)))",
-            .want = try parse("coffee"),
-        },
-        TestCase{
-            .code = "(cons '(a b) '(c d))",
-            .want = try parse("((a b) c d)"),
-        },
-        TestCase{
-            .code = "(begin (setq menu '(tea coffee milk)) (cons 'cocoa menu))",
-            .want = try parse("(cocoa tea coffee milk)"),
-        },
-        TestCase{
-            .code = "(begin (setq menu '(tea coffee milk)) (cons 'cocoa (cdr menu)))",
-            .want = try parse("(cocoa coffee milk)"),
-        },
-        TestCase{
-            .code = "(begin (setq menu '(tea coffee milk)) (car (cdr (cdr menu))))",
-            .want = try parse("milk"),
-        },
-        TestCase{
-            .code = "(begin (setq menu '(tea coffee milk)) (cons 'juice (cdr menu)))",
-            .want = try parse("(juice coffee milk)"),
-        },
-        TestCase{
-            .code = "(begin (setq menu '(tea coffee milk)) (cons (car menu) (cons 'juice (cdr menu))))",
-            .want = try parse("(tea juice coffee milk)"),
-        },
-        TestCase{
-            .code = "(begin (setq menu '(tea coffee milk)) (cons (car menu) (cdr (cdr menu))))",
-            .want = try parse("(tea milk)"),
-        },
-        TestCase{
-            .code = "(begin (setq menu '(tea coffee milk)) (cons (car (cdr menu)) (cons (car menu) (cdr (cdr menu)))))",
-            .want = try parse("(coffee tea milk)"),
+            .code = "(begin (defun x () 1) (x))",
+            .want = try parse("1"),
         },
         TestCase{
             .code = "(begin (defun double (x) (+ x x)) (double 1))",
@@ -265,6 +213,10 @@ test "tokenize" {
         },
         TestCase{
             .code = @embedFile("examples/y-comb.lisp"),
+            .want = try parse("55"),
+        },
+        TestCase{
+            .code = @embedFile("examples/y-comb2.lisp"),
             .want = try parse("55"),
         },
     };

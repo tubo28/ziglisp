@@ -11,10 +11,6 @@ Disclaimer: the author make it for his own learning Zig purposes, so the quality
 
 ```
 $ zig run src/main.zig
->>> (setq a 1)
-1
->>> (+ a a)
-2
 >>> (print '(hello world))
 #print: (hello world)
 (hello world)
@@ -76,7 +72,6 @@ Developed under Zig version 0.12.0-dev.494+a8d2ed806.
     * `let`
     * `progn`
     * `quote`
-    * `setq`
 
 ## License
 
