@@ -82,6 +82,7 @@ pub fn newFunc(name: ?[]const u8, params: [][]const u8, body: []ValueRef, env: M
 }
 
 var empty_opt: ?*Value = null;
+var empty_cons_opt: ?*Cons = null;
 var t_opt: ?*Value = null;
 var f_opt: ?*Value = null;
 
@@ -89,9 +90,15 @@ var f_opt: ?*Value = null;
 pub fn empty() ValueRef {
     if (empty_opt) |e| return e;
     var e = alloc.create(Value) catch @panic("failed to alloc nil");
-    e.* = Value{ .cons = newCons(e, e) catch @panic("failed to alloc cons of nil") };
+    empty_cons_opt = newCons(e, e) catch unreachable;
+    e.* = Value{ .cons = empty_cons_opt.? };
     empty_opt = e;
     return empty_opt.?;
+}
+
+fn emptyCons() ValueRef {
+    _ = empty();
+    return empty_cons_opt.?;
 }
 
 pub fn f() ValueRef {
@@ -121,7 +128,11 @@ pub fn toString(cell: ValueRef) ![]const u8 {
 
 fn toStringInner(cell: ValueRef, builder: *std.ArrayList(u8)) anyerror!void {
     switch (cell.*) {
-        Value.cons => try consToString(cell, builder),
+        Value.cons => |c| {
+            try builder.append('(');
+            try consToString(c, builder);
+            try builder.append(')');
+        },
         Value.number => |num| {
             var buffer: [30]u8 = undefined;
             const str = std.fmt.bufPrint(
@@ -144,41 +155,22 @@ fn toStringInner(cell: ValueRef, builder: *std.ArrayList(u8)) anyerror!void {
     }
 }
 
-fn consToString(x: ValueRef, builder: *std.ArrayList(u8)) !void {
-    switch (consOpt(x).?.cdr.*) {
-        Value.cons => {
+fn consToString(x: *const Cons, builder: *std.ArrayList(u8)) !void {
+    switch (x.cdr.*) {
+        Value.cons => |next| {
             // List
-            try builder.append('(');
-            var head = x;
-            var first = true;
-            while (head != empty()) {
-                if (consOpt(head)) |c| {
-                    if (!first) try builder.append(' ');
-                    first = false;
-                    try toStringInner(c.car, builder);
-                    head = c.cdr;
-                } else {
-                    break;
-                }
-            }
-            try builder.append(')');
+            try toStringInner(x.car, builder);
+            if (next == emptyCons()) return;
+            try builder.append(' ');
+            try consToString(next, builder);
         },
         else => {
             // Dotted pair
-            try builder.append('(');
-            try toStringInner(x.cons.car, builder);
+            try toStringInner(x.car, builder);
             try builder.appendSlice(" . ");
-            try toStringInner(x.cons.cdr, builder);
-            try builder.append(')');
+            try toStringInner(x.cdr, builder);
         },
     }
-}
-
-fn consOpt(x: ValueRef) ?*const Cons {
-    return switch (x.*) {
-        Value.cons => |cons| cons,
-        else => null,
-    };
 }
 
 pub fn panicAt(tok: Token, message: []const u8) void {
