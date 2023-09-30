@@ -21,9 +21,7 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
     switch (x.*) {
         Value.number => return .{ x, env },
         Value.function => unreachable,
-        Value.symbol => |sym| {
-            return if (env.get(sym)) |ent| .{ ent, env } else .{ x, env };
-        },
+        Value.symbol => |sym| return if (env.get(sym)) |ent| .{ ent, env } else .{ x, env },
         Value.cons => |cons| {
             if (x == common.empty()) {
                 std.log.err("empty list cannot be evaluated", .{});
@@ -32,21 +30,24 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
             switch (cons.car.*) {
                 Value.number => @panic("number cannot be a function"),
                 Value.cons => {
+                    // Code like ((lambda (x) (+ x x)) 1) goes through here
                     const l, var new_env = try evaluate(cons.car, env);
                     const ar, new_env = try toEvaledSlice(cons.cdr, new_env);
                     return .{ try callFunction(l, ar), new_env };
                 },
                 Value.function => @panic("unimplemented"),
                 Value.symbol => |sym| {
-                    // User-defined functions.
                     if (env.get(sym)) |func| {
+                        // User-defined functions.
                         const args, const new_env = try toEvaledSlice(cons.cdr, env);
+                        _ = new_env;
                         switch (func.*) {
                             Value.function => return .{ try callFunction(func, args), env },
-                            Value.cons => {
-                                const ef, _ = try evaluate(func, new_env);
-                                return .{ try callFunction(ef, args), env };
-                            },
+                            // I can't remember why below code exists
+                            // Value.cons => {
+                            //     const l, _ = try evaluate(func, new_env);
+                            //     return .{ try callFunction(l, args), env };
+                            // },
                             else => @panic("symbol not binded to function"),
                         }
                     }
