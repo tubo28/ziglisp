@@ -12,7 +12,7 @@ pub const Token = struct {
 
 pub const TokenKind = union(enum) {
     int: i64,
-    symbol: Symbol.SymbolID,
+    symbol: Symbol.ID,
     left, // (
     right, // )
     quote, // '

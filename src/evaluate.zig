@@ -11,7 +11,7 @@ const ValueRef = common.ValueRef;
 const Value = common.Value;
 
 const Symbol = @import("symbol.zig");
-const SymbolID = Symbol.SymbolID;
+const SymbolID = Symbol.ID;
 
 const Token = @import("tokenize.zig").Token;
 
@@ -32,33 +32,23 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
                 Value.cons => {
                     // Code like ((lambda (x) (+ x x)) 1) goes through here
                     const l, var new_env = try evaluate(cons.car, env);
-                    const ar, new_env = try toEvaledSlice(cons.cdr, new_env);
-                    return .{ try callFunction(l, ar), new_env };
+                    return call(l.function, cons.cdr, new_env);
                 },
                 Value.function => @panic("unimplemented"),
                 Value.symbol => |sym| {
-                    if (env.get(sym)) |func| {
-                        // User-defined functions.
-                        const args, const new_env = try toEvaledSlice(cons.cdr, env);
-                        _ = new_env;
-                        switch (func.*) {
-                            Value.function => return .{ try callFunction(func, args), env },
-                            // I can't remember why below code exists
-                            // Value.cons => {
-                            //     const l, _ = try evaluate(func, new_env);
-                            //     return .{ try callFunction(l, args), env };
-                            // },
-                            else => @panic("symbol not binded to function"),
-                        }
-                    }
-                    if (special_form(sym)) |func| {
-                        const args = try toSlice(cons.cdr);
-                        return func(args, env);
-                    }
-                    if (builtin_func(sym)) |func| {
-                        const args, const new_env = try toEvaledSlice(cons.cdr, env);
-                        return .{ try func(args), new_env };
-                    }
+                    // User-defined functions.
+                    if (env.get(sym)) |func| return call(func.function, cons.cdr, env);
+                    // switch (func.*) {
+                    //     Value.function => |ff| return .{ try callFunction(ff, args), env },
+                    //     // I can't remember why I wrote this code
+                    //     // Value.cons => {
+                    //     //     const l, _ = try evaluate(func, new_env);
+                    //     //     return .{ try callFunction(l, args), env };
+                    //     // },
+                    //     else => @panic("symbol not binded to function"),
+                    // }
+                    if (special_form(sym)) |func| return call(func, cons.cdr, env);
+                    if (builtin_func(sym)) |func| return call(func, cons.cdr, env);
                     std.log.err("function or special form not defined: {s} ({})\n", .{ Symbol.getName(sym).?, sym });
                     unreachable;
                 },
@@ -67,8 +57,28 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
     }
 }
 
-fn callFunction(x: ValueRef, args: []ValueRef) anyerror!ValueRef {
-    const func = x.function;
+fn call(val: anytype, args: ValueRef, env: Map) anyerror!EvalResult {
+    const ty = @TypeOf(val);
+    switch (ty) {
+        *const SpecialForm => return val(try toSlice(args), env),
+        *const BuiltinFunc => {
+            const argSlice, const new_env = try toSliceE(args, env);
+            return .{ try val(argSlice), new_env };
+        },
+        *const Function => { // lambda or define
+            const argSlice, const new_env = try toSliceE(args, env);
+            return .{ try callFunction(val, argSlice), new_env };
+        },
+        else => {
+            std.log.err("not callable value: {}", .{val});
+            std.log.err("ty: {}", .{ty});
+            unreachable;
+        },
+    }
+}
+
+fn callFunction(func: *const Function, args: []ValueRef) anyerror!ValueRef {
+    //    const func = x.function;
     if (func.params.len != args.len) {
         const name = if (func.name) |n| Symbol.getName(n).? else "<lambda>";
         std.log.err("wrong number of argument for {s}", .{name});
@@ -80,7 +90,7 @@ fn callFunction(x: ValueRef, args: []ValueRef) anyerror!ValueRef {
     // Overwrite env entries if exist.
     // It means argument name shadows the values with same name at the defined time.
     // For function name
-    if (func.name) |name| try new_env.put(name, x);
+    if (func.name) |name| try new_env.put(name, try common.newFunctionValue(func));
     // For arguments
     for (func.params, args) |param, arg|
         try new_env.put(param, arg);
@@ -107,7 +117,7 @@ fn toSlice(head: ValueRef) ![]ValueRef {
     return try ret.toOwnedSlice();
 }
 
-fn toEvaledSlice(head: ValueRef, env: Map) !struct { []ValueRef, Map } {
+fn toSliceE(head: ValueRef, env: Map) !struct { []ValueRef, Map } {
     var ret = try toSlice(head);
     var e = try env.clone();
     for (ret) |*x| x.*, e = try evaluate(x.*, env);
@@ -180,7 +190,7 @@ fn let(args: []ValueRef, env: Map) anyerror!EvalResult {
     const pairsSlice = try toSlice(pairs);
     const n = pairsSlice.len;
 
-    var keys: []Symbol.SymbolID = try alloc.alloc(Symbol.SymbolID, n);
+    var keys: []Symbol.ID = try alloc.alloc(Symbol.ID, n);
     defer alloc.free(keys);
     var vals: []ValueRef = try alloc.alloc(ValueRef, n);
     defer alloc.free(vals);
@@ -210,15 +220,15 @@ fn defineFunction(args: []ValueRef, env: Map) anyerror!EvalResult {
     const slice = try toSlice(params);
     const name = slice[0];
 
-    var sym_params = std.ArrayList(Symbol.SymbolID).init(alloc);
+    var sym_params = std.ArrayList(Symbol.ID).init(alloc);
     for (slice[1..]) |arg| try sym_params.append(symbolp(arg).?);
     const sym_name = symbolp(name).?;
-    const func = try common.newFunctionValue(
+    const func = try common.newFunctionValue(try common.newFunction(
         sym_name,
         try sym_params.toOwnedSlice(),
         body,
         env,
-    );
+    ));
     return .{ func, try putPure(env, sym_name, func) };
 }
 
@@ -230,17 +240,17 @@ fn defineValue() anyerror!ValueRef {
 fn lambda(args: []ValueRef, env: Map) anyerror!EvalResult {
     const params = args[0];
     const body = args[1..];
-    var sym_params = std.ArrayList(Symbol.SymbolID).init(alloc);
+    var sym_params = std.ArrayList(Symbol.ID).init(alloc);
     {
         var tmp = try toSlice(params);
         for (tmp) |a| try sym_params.append(symbolp(a).?);
     }
-    const func = try common.newFunctionValue(
+    const func = try common.newFunctionValue(try common.newFunction(
         null,
         try sym_params.toOwnedSlice(),
         body,
         env,
-    );
+    ));
     return .{ func, env };
 }
 
@@ -394,7 +404,7 @@ fn numberp(atom: ValueRef) ?i64 {
     }
 }
 
-fn symbolp(atom: ValueRef) ?Symbol.SymbolID {
+fn symbolp(atom: ValueRef) ?Symbol.ID {
     switch (atom.*) {
         Value.symbol => |sym| return sym,
         else => return null,
@@ -429,7 +439,7 @@ pub fn deepEql(x: ValueRef, y: ValueRef) bool {
     }
 }
 
-fn putPure(env: Map, key: Symbol.SymbolID, val: ValueRef) !Map {
+fn putPure(env: Map, key: Symbol.ID, val: ValueRef) !Map {
     var ret = try env.clone();
     try ret.put(key, val);
     return ret;

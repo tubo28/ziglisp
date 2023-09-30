@@ -4,7 +4,7 @@ pub const Token = @import("tokenize.zig").Token;
 pub const ValueRef = *const Value;
 
 const Symbol = @import("symbol.zig");
-const SymbolID = Symbol.SymbolID;
+const SymbolID = Symbol.ID;
 
 pub const Map = std.AutoHashMap(SymbolID, ValueRef); // TODO: Dependency for env
 
@@ -56,18 +56,13 @@ pub const Function = struct {
     env: Map, // captured env (lexical scope)
 };
 
-pub fn newFunctionValue(
-    name: ?SymbolID,
-    params: []SymbolID,
-    body: []ValueRef,
-    env: Map,
-) !ValueRef {
+pub fn newFunctionValue(func: *const Function) !ValueRef {
     var ret = try alloc.create(Value);
-    ret.* = Value{ .function = try newFunc(name, params, body, env) };
+    ret.* = Value{ .function = func };
     return ret;
 }
 
-pub fn newFunc(name: ?SymbolID, params: []SymbolID, body: []ValueRef, env: Map) !*Function {
+pub fn newFunction(name: ?SymbolID, params: []SymbolID, body: []ValueRef, env: Map) !*Function {
     var ret: *Function = try alloc.create(Function);
     ret.* = Function{
         .name = name,
