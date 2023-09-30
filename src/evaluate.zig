@@ -142,9 +142,9 @@ fn builtin_func(sid: SymbolID) ?*const BuiltinFunc {
     return if (sid & builtin_func_mask != 0) builtin_func_funcs[sid ^ builtin_func_mask] else null;
 }
 const builtin_func_mask: SymbolID = 1 << 29;
-const builtin_func_names = [_][]const u8{ "car", "cdr", "cons", "list", "print", "+", "-", "*", "=", "<", "<=", ">", ">=", "or", "and", "length", "null?", "quotient", "modulo" };
+const builtin_func_names = [_][]const u8{ "car", "cdr", "cons", "list", "print", "+", "-", "*", "=", "<", "or", "and", "length", "null?", "quotient", "modulo" };
 // TODO: Move some of list items to another file and read it with @embedFile
-const builtin_func_funcs = [_]*const BuiltinFunc{ car, cdr, cons_, list, print, add, sub, mul, eq, le, leq, ge, geq, or_, and_, length, null_, quotient, modulo };
+const builtin_func_funcs = [_]*const BuiltinFunc{ car, cdr, cons_, list, print, add, sub, mul, eq, le, or_, and_, length, null_, quotient, modulo };
 
 // special form
 fn quote(args: []ValueRef, env: Map) anyerror!EvalResult {
@@ -352,21 +352,6 @@ fn toValue(x: bool) anyerror!ValueRef {
 // built-in func
 fn le(args: []ValueRef) anyerror!ValueRef {
     return toValue(args[0].number < args[1].number);
-}
-
-// built-in func
-fn leq(args: []ValueRef) anyerror!ValueRef {
-    return toValue(args[0].number <= args[1].number);
-}
-
-// built-in func
-fn ge(args: []ValueRef) anyerror!ValueRef {
-    return toValue(args[0].number > args[1].number);
-}
-
-// built-in func
-fn geq(args: []ValueRef) anyerror!ValueRef {
-    return toValue(args[0].number > args[1].number);
 }
 
 // built-in func

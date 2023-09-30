@@ -1,3 +1,8 @@
+(define (not a) (if a '#f '#t))
+(define (<= a b) (not (< b a)))
+(define (> a b) (< b a))
+(define (>= a b) (<= b a))
+
 (define (append list1 list2)
   (cond
     ((null? list1) list2)

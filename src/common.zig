@@ -119,6 +119,10 @@ pub fn toString(cell: ValueRef) ![]const u8 {
 }
 
 fn toStringInner(cell: ValueRef, builder: *std.ArrayList(u8)) anyerror!void {
+    if (cell == empty()) {
+        try builder.appendSlice("()");
+        return;
+    }
     switch (cell.*) {
         Value.cons => |c| {
             try builder.append('(');
