@@ -3,7 +3,7 @@ const std = @import("std");
 pub const Token = @import("tokenize.zig").Token;
 pub const ValueRef = *const Value;
 
-pub const Map = std.StringHashMap(ValueRef); // TODO: Dependency for env
+pub const Map = std.AutoHashMap(SymbolID, ValueRef); // TODO: Dependency for env
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 pub const alloc = gpa.allocator();
@@ -19,11 +19,13 @@ pub fn newCons(car: ValueRef, cdr: ValueRef) !*Cons {
     return cons;
 }
 
+pub const SymbolID = u32;
+
 /// Node of tree.
 /// It is a branch only if cons, otherwise leaf.
 pub const Value = union(enum) {
     number: i64,
-    symbol: []const u8,
+    symbol: SymbolID, // ID
     cons: *const Cons,
     function: *const Function,
 };
@@ -35,20 +37,14 @@ pub fn newConsValue(car: ValueRef, cdr: ValueRef) !ValueRef {
 }
 
 pub fn newNumberValue(x: i64) !ValueRef {
-    return newAtomValue(i64, x);
-}
-
-pub fn newSymbolValue(x: []const u8) !ValueRef {
-    return try newAtomValue([]const u8, x);
-}
-
-fn newAtomValue(comptime T: type, value: T) !ValueRef {
     var ret = try alloc.create(Value);
-    switch (T) {
-        i64 => ret.* = Value{ .number = value },
-        []const u8 => ret.* = Value{ .symbol = value },
-        else => @panic("currently atom of only i64 or string are implemented"),
-    }
+    ret.* = Value{ .number = x };
+    return ret;
+}
+
+pub fn newSymbolValue(x: SymbolID) !ValueRef {
+    var ret = try alloc.create(Value);
+    ret.* = Value{ .symbol = x };
     return ret;
 }
 
@@ -182,4 +178,59 @@ pub fn panicAt(tok: Token, message: []const u8) void {
         stderr.print("^\n");
     }
     unreachable;
+}
+
+const fn_names = [_][]const u8{
+    "car",
+    "cdr",
+    "cons",
+    "list",
+    "print",
+    "+",
+    "-",
+    "*",
+    "=",
+    "<",
+    "<=",
+    ">",
+    ">=",
+    "or",
+    "and",
+    "length",
+    "null?",
+    "quotient",
+    "modulo",
+};
+
+const sf_name = [_][]const u8{
+    "quote",
+    "begin",
+    "define",
+    "lambda",
+    "if",
+    "cond",
+    "let",
+};
+
+var sid: u32 = 0;
+var symbolID: std.StringHashMap(u32) = undefined;
+
+pub fn init() !void {
+    std.debug.assert(sid == 0);
+    for (fn_names) |s| {
+        sid += 1;
+        symbolID.put(s, sid);
+    }
+    for (sf_name) |s| {
+        sid += 1;
+        symbolID.put(s, sid);
+    }
+}
+
+pub fn getSID(s: []const u8) !u32 {
+    std.debug.assert(sid != 0);
+    if (symbolID.get(s)) |id| return id;
+    sid += 1;
+    try symbolID.put(s, sid);
+    return sid;
 }

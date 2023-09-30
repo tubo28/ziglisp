@@ -10,7 +10,7 @@ pub const Token = struct {
 
 pub const TokenKind = union(enum) {
     int: i64,
-    symbol: []const u8,
+    symbol: common.SymbolID,
     left, // (
     right, // )
     quote, // '
@@ -82,7 +82,7 @@ pub fn tokenize(code: []const u8) ![]const Token {
                 try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind.f });
                 continue;
             }
-            try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind{ .symbol = sym } });
+            try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind{ .symbol = try common.getSID(sym) } });
             continue;
         }
     }

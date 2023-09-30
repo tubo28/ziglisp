@@ -39,7 +39,7 @@ fn parseSExpr(tokens: []const Token) anyerror!struct { ValueRef, []const Token }
         TokenKind.quote => {
             // <quote> <sexpr> => (quote <sexpr>)
             const value, const rest = try parseSExpr(tail);
-            const quote = try common.newSymbolValue("quote");
+            const quote = try common.newSymbolValue(try common.getSID("quote"));
             return .{
                 try common.newConsValue(quote, try common.newConsValue(value, common.empty())),
                 rest,

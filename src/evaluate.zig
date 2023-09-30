@@ -3,6 +3,7 @@ const std = @import("std");
 const common = @import("common.zig");
 const alloc = common.alloc;
 const Function = common.Function;
+const getSID = common.getSID;
 const Map = common.Map;
 const t = common.t;
 const f = common.f;
@@ -40,19 +41,19 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
                     // Special forms.
                     {
                         const args = try toSlice(cdr(x));
-                        if (eql(u8, sym, "quote"))
+                        if (sym == try getSID("quote"))
                             return .{ args[0], env };
-                        if (eql(u8, sym, "begin"))
+                        if (sym == try getSID("begin"))
                             return begin(cdr(x), env);
-                        if (eql(u8, sym, "define"))
+                        if (sym == try getSID("define"))
                             return defineFunction(args[0], args[1..], env);
-                        if (eql(u8, sym, "lambda"))
+                        if (sym == try getSID("lambda"))
                             return lambda(args[0], args[1..], env);
-                        if (eql(u8, sym, "if"))
+                        if (sym == try getSID("if"))
                             return if_(args[0], args[1], if (args.len >= 3) args[2] else null, env);
-                        if (eql(u8, sym, "cond"))
+                        if (sym == try getSID("cond"))
                             return cond(args, env);
-                        if (eql(u8, sym, "let"))
+                        if (sym == try getSID("let"))
                             return let(args[0], args[1], env);
                     }
 
