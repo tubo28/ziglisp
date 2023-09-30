@@ -3,13 +3,14 @@ const std = @import("std");
 const common = @import("common.zig");
 const alloc = common.alloc;
 const Function = common.Function;
-const getSID = common.getSID;
 const Map = common.Map;
 const t = common.t;
 const f = common.f;
 const toString = common.toString;
 const ValueRef = common.ValueRef;
 const Value = common.Value;
+
+const S = @import("symbol.zig");
 
 const Token = @import("tokenize.zig").Token;
 
@@ -37,23 +38,23 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
                 Value.function => @panic("unimplemented"),
                 Value.symbol => |sym| {
                     const eql = std.mem.eql;
+                    _ = eql;
 
-                    // Special forms.
-                    {
+                    if (S.isSpecialForm(sym)) { // TODO: Change isSpecialForm to return option
                         const args = try toSlice(cdr(x));
-                        if (sym == try getSID("quote"))
+                        if (sym == try S.getID("quote"))
                             return .{ args[0], env };
-                        if (sym == try getSID("begin"))
+                        if (sym == try S.getID("begin"))
                             return begin(cdr(x), env);
-                        if (sym == try getSID("define"))
+                        if (sym == try S.getID("define"))
                             return defineFunction(args[0], args[1..], env);
-                        if (sym == try getSID("lambda"))
+                        if (sym == try S.getID("lambda"))
                             return lambda(args[0], args[1..], env);
-                        if (sym == try getSID("if"))
+                        if (sym == try S.getID("if"))
                             return if_(args[0], args[1], if (args.len >= 3) args[2] else null, env);
-                        if (sym == try getSID("cond"))
+                        if (sym == try S.getID("cond"))
                             return cond(args, env);
-                        if (sym == try getSID("let"))
+                        if (sym == try S.getID("let"))
                             return let(args[0], args[1], env);
                     }
 
@@ -72,52 +73,45 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
 
                     // Built-in functions.
                     // TODO: Move some of them to another file and read it with @embedFile
-                    builtin: {
-                        // Traverse the list of built-in functions to check the existence of function
-                        // in order not to call toEvaledSlice meaninglessly.
-                        const names = [_][]const u8{ "car", "cdr", "cons", "list", "print", "+", "-", "*", "=", "<", "<=", ">", ">=", "or", "and", "length", "null?", "quotient", "modulo" };
-                        var found = false;
-                        for (names) |n| found = found or eql(u8, sym, n);
-                        if (!found) break :builtin;
-
+                    if (S.isBuiltinFunc(sym)) {
                         const args, const new_env = try toEvaledSlice(cdr(x), env);
-                        if (eql(u8, sym, "car"))
+                        if (sym == try S.getID("car"))
                             return .{ car(args[0]), new_env };
-                        if (eql(u8, sym, "cdr"))
+                        if (sym == try S.getID("cdr"))
                             return .{ cdr(args[0]), new_env };
-                        if (eql(u8, sym, "cons"))
+                        if (sym == try S.getID("cons"))
                             return .{ try cons_(args[0], args[1]), new_env };
-                        if (eql(u8, sym, "list"))
+                        if (sym == try S.getID("list"))
                             return .{ try list(args), new_env };
-                        if (eql(u8, sym, "print"))
+                        if (sym == try S.getID("print"))
                             return .{ try print(args[0]), new_env };
-                        if (eql(u8, sym, "+"))
+                        if (sym == try S.getID("+"))
                             return .{ try add(args), new_env };
-                        if (eql(u8, sym, "-"))
+                        if (sym == try S.getID("-"))
                             return .{ try sub(args), new_env };
-                        if (eql(u8, sym, "*"))
+                        if (sym == try S.getID("*"))
                             return .{ try mul(args), new_env };
-                        if (eql(u8, sym, "quotient"))
+                        if (sym == try S.getID("quotient"))
                             return .{ try quotient(args), new_env };
-                        if (eql(u8, sym, "modulo"))
+                        if (sym == try S.getID("modulo"))
                             return .{ try modulo(args), new_env };
-                        if (eql(u8, sym, "="))
+                        if (sym == try S.getID("="))
                             return .{ eq(args[0], args[1]), new_env };
-                        if (eql(u8, sym, "<"))
+                        if (sym == try S.getID("<"))
                             return .{ le(args[0], args[1]), new_env };
-                        if (eql(u8, sym, "<="))
+                        if (sym == try S.getID("<="))
                             return .{ leq(args[0], args[1]), new_env };
-                        if (eql(u8, sym, ">"))
+                        if (sym == try S.getID(">"))
                             return .{ ge(args[0], args[1]), new_env };
-                        if (eql(u8, sym, ">="))
+                        if (sym == try S.getID(">="))
                             return .{ geq(args[0], args[1]), new_env };
-                        if (eql(u8, sym, "or"))
+                        if (sym == try S.getID("or"))
                             return .{ or_(args), new_env };
-                        if (eql(u8, sym, "and"))
+                        if (sym == try S.getID("and"))
                             return .{ and_(args), new_env };
-                        if (eql(u8, sym, "length"))
+                        if (sym == try S.getID("length"))
                             return .{ try length(args[0]), new_env };
-                        if (eql(u8, sym, "null?"))
+                        if (sym == try S.getID("null?"))
                             return .{ null_(args[0]), new_env };
                     }
 
@@ -132,7 +126,8 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
 fn callFunction(x: ValueRef, args: []ValueRef) anyerror!ValueRef {
     const func = x.function;
     if (func.params.len != args.len) {
-        std.log.err("wrong number of argument for {s}", .{func.name orelse "lambda"});
+        const name = if (func.name) |n| S.getName(n).? orelse "lambda";
+        std.log.err("wrong number of argument for {s}", .{name});
         @panic("wrong number of arguments for function");
     }
 
@@ -438,7 +433,7 @@ pub fn deepEql(x: ValueRef, y: ValueRef) bool {
             else => return false,
         },
         Value.symbol => |x_| switch (y.*) {
-            Value.symbol => |y_| return std.mem.eql(u8, x_, y_),
+            Value.symbol => |y_| return x_ == y_,
             else => return false,
         },
         Value.cons => |x_| switch (y.*) {
@@ -447,7 +442,7 @@ pub fn deepEql(x: ValueRef, y: ValueRef) bool {
         },
         Value.function => |x_| switch (y.*) {
             Value.function => |y_| {
-                if (x_.name != null and y_.name != null) return std.mem.eql(u8, x_.name.?, y_.name.?); // just comparing name
+                if (x_.name != null and y_.name != null) return x_.name.? == y_.name.?; // just comparing name
                 if (x_.name == null and y_.name == null) return true;
                 return false;
             },

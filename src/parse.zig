@@ -4,6 +4,8 @@ pub const assert = std.debug.assert;
 const Token = @import("tokenize.zig").Token;
 const TokenKind = @import("tokenize.zig").TokenKind;
 
+const S = @import("symbol.zig");
+
 const common = @import("common.zig");
 const Value = common.Value;
 const ValueRef = common.ValueRef;
@@ -39,7 +41,7 @@ fn parseSExpr(tokens: []const Token) anyerror!struct { ValueRef, []const Token }
         TokenKind.quote => {
             // <quote> <sexpr> => (quote <sexpr>)
             const value, const rest = try parseSExpr(tail);
-            const quote = try common.newSymbolValue(try common.getSID("quote"));
+            const quote = try common.newSymbolValue(try S.getID("quote"));
             return .{
                 try common.newConsValue(quote, try common.newConsValue(value, common.empty())),
                 rest,

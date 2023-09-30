@@ -2,6 +2,8 @@ const std = @import("std");
 const common = @import("common.zig");
 const alloc = common.alloc;
 
+const S = @import("symbol.zig");
+
 pub const Token = struct {
     line: []const u8,
     index: usize,
@@ -10,7 +12,7 @@ pub const Token = struct {
 
 pub const TokenKind = union(enum) {
     int: i64,
-    symbol: common.SymbolID,
+    symbol: S.SymbolID,
     left, // (
     right, // )
     quote, // '
@@ -82,7 +84,7 @@ pub fn tokenize(code: []const u8) ![]const Token {
                 try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind.f });
                 continue;
             }
-            try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind{ .symbol = try common.getSID(sym) } });
+            try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind{ .symbol = try S.getID(sym) } });
             continue;
         }
     }

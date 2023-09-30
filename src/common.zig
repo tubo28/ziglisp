@@ -3,6 +3,9 @@ const std = @import("std");
 pub const Token = @import("tokenize.zig").Token;
 pub const ValueRef = *const Value;
 
+const S = @import("symbol.zig");
+const SymbolID = S.SymbolID;
+
 pub const Map = std.AutoHashMap(SymbolID, ValueRef); // TODO: Dependency for env
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -18,8 +21,6 @@ pub fn newCons(car: ValueRef, cdr: ValueRef) !*Cons {
     cons.* = Cons{ .car = car, .cdr = cdr };
     return cons;
 }
-
-pub const SymbolID = u32;
 
 /// Node of tree.
 /// It is a branch only if cons, otherwise leaf.
@@ -49,7 +50,7 @@ pub fn newSymbolValue(x: SymbolID) !ValueRef {
 }
 
 pub const Function = struct {
-    name: ?[]const u8, // null for lambda
+    name: ?SymbolID, // null for lambda
     params: [][]const u8,
     body: []ValueRef,
     env: Map, // captured env (lexical scope)
@@ -178,59 +179,4 @@ pub fn panicAt(tok: Token, message: []const u8) void {
         stderr.print("^\n");
     }
     unreachable;
-}
-
-const fn_names = [_][]const u8{
-    "car",
-    "cdr",
-    "cons",
-    "list",
-    "print",
-    "+",
-    "-",
-    "*",
-    "=",
-    "<",
-    "<=",
-    ">",
-    ">=",
-    "or",
-    "and",
-    "length",
-    "null?",
-    "quotient",
-    "modulo",
-};
-
-const sf_name = [_][]const u8{
-    "quote",
-    "begin",
-    "define",
-    "lambda",
-    "if",
-    "cond",
-    "let",
-};
-
-var sid: u32 = 0;
-var symbolID: std.StringHashMap(u32) = undefined;
-
-pub fn init() !void {
-    std.debug.assert(sid == 0);
-    for (fn_names) |s| {
-        sid += 1;
-        symbolID.put(s, sid);
-    }
-    for (sf_name) |s| {
-        sid += 1;
-        symbolID.put(s, sid);
-    }
-}
-
-pub fn getSID(s: []const u8) !u32 {
-    std.debug.assert(sid != 0);
-    if (symbolID.get(s)) |id| return id;
-    sid += 1;
-    try symbolID.put(s, sid);
-    return sid;
 }
