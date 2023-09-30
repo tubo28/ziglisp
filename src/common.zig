@@ -101,7 +101,7 @@ fn emptyCons() *const Cons {
 pub fn f() ValueRef {
     if (f_opt) |ff| return ff;
     var f_ = alloc.create(Value) catch @panic("failed to alloc #f");
-    f_.* = Value{ .symbol = Symbol.getIDOrNew("#f") catch unreachable };
+    f_.* = Value{ .symbol = Symbol.getOrRegister("#f") catch unreachable };
     f_opt = f_;
     return f_opt.?;
 }
@@ -111,7 +111,7 @@ pub fn f() ValueRef {
 pub fn t() ValueRef {
     if (t_opt) |tt| return tt;
     var t_ = alloc.create(Value) catch @panic("failed to alloc #t");
-    t_.* = Value{ .symbol = Symbol.getIDOrNew("#t") catch @panic("symbol #t not registered") };
+    t_.* = Value{ .symbol = Symbol.getOrRegister("#t") catch @panic("symbol #t not registered") };
     t_opt = t_;
     return t_opt.?;
 }

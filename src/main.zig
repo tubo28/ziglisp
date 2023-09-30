@@ -16,6 +16,7 @@ const E = @import("evaluate.zig");
 
 pub fn main() !void {
     try Symbol.init();
+    try E.init();
     const args = try std.process.argsAlloc(common.alloc);
     if (args.len == 2) {
         try evalFile(args[1]);
@@ -97,6 +98,7 @@ fn parse(code: []const u8) ![]V {
 test "tokenize" {
     std.testing.log_level = std.log.Level.debug;
     try Symbol.init();
+    try E.init();
 
     const TestCase = struct {
         code: []const u8,

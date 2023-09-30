@@ -84,7 +84,7 @@ pub fn tokenize(code: []const u8) ![]const Token {
                 try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind.f });
                 continue;
             }
-            const sid = try Symbol.getIDOrNew(sym);
+            const sid = try Symbol.getOrRegister(sym);
             try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind{ .symbol = sid } });
             continue;
         }

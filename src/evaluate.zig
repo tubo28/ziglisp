@@ -11,6 +11,7 @@ const ValueRef = common.ValueRef;
 const Value = common.Value;
 
 const Symbol = @import("symbol.zig");
+const SymbolID = Symbol.SymbolID;
 
 const Token = @import("tokenize.zig").Token;
 
@@ -37,27 +38,6 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
                 },
                 Value.function => @panic("unimplemented"),
                 Value.symbol => |sym| {
-                    const eql = std.mem.eql;
-                    _ = eql;
-
-                    if (Symbol.isSpecialForm(sym)) { // TODO: Change isSpecialForm to return option
-                        const args = try toSlice(cdr(x));
-                        if (sym == try Symbol.getIDOrNew("quote"))
-                            return .{ args[0], env };
-                        if (sym == try Symbol.getIDOrNew("begin"))
-                            return begin(cdr(x), env);
-                        if (sym == try Symbol.getIDOrNew("define"))
-                            return defineFunction(args[0], args[1..], env);
-                        if (sym == try Symbol.getIDOrNew("lambda"))
-                            return lambda(args[0], args[1..], env);
-                        if (sym == try Symbol.getIDOrNew("if"))
-                            return funcs[0](args, env);
-                        if (sym == try Symbol.getIDOrNew("cond"))
-                            return cond(args, env);
-                        if (sym == try Symbol.getIDOrNew("let"))
-                            return let(args[0], args[1], env);
-                    }
-
                     // User-defined functions.
                     if (env.get(sym)) |func| {
                         const args, const new_env = try toEvaledSlice(cdr(x), env);
@@ -71,47 +51,52 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
                         }
                     }
 
+                    if (special_form(sym)) |func| {
+                        const args = try toSlice(cdr(x));
+                        return func(args, env);
+                    }
+
                     // Built-in functions.
                     // TODO: Move some of them to another file and read it with @embedFile
                     if (Symbol.isBuiltinFunc(sym)) {
                         const args, const new_env = try toEvaledSlice(cdr(x), env);
-                        if (sym == try Symbol.getIDOrNew("car"))
+                        if (sym == try Symbol.getOrRegister("car"))
                             return .{ car(args[0]), new_env };
-                        if (sym == try Symbol.getIDOrNew("cdr"))
+                        if (sym == try Symbol.getOrRegister("cdr"))
                             return .{ cdr(args[0]), new_env };
-                        if (sym == try Symbol.getIDOrNew("cons"))
+                        if (sym == try Symbol.getOrRegister("cons"))
                             return .{ try cons_(args[0], args[1]), new_env };
-                        if (sym == try Symbol.getIDOrNew("list"))
+                        if (sym == try Symbol.getOrRegister("list"))
                             return .{ try list(args), new_env };
-                        if (sym == try Symbol.getIDOrNew("print"))
+                        if (sym == try Symbol.getOrRegister("print"))
                             return .{ try print(args[0]), new_env };
-                        if (sym == try Symbol.getIDOrNew("+"))
+                        if (sym == try Symbol.getOrRegister("+"))
                             return .{ try add(args), new_env };
-                        if (sym == try Symbol.getIDOrNew("-"))
+                        if (sym == try Symbol.getOrRegister("-"))
                             return .{ try sub(args), new_env };
-                        if (sym == try Symbol.getIDOrNew("*"))
+                        if (sym == try Symbol.getOrRegister("*"))
                             return .{ try mul(args), new_env };
-                        if (sym == try Symbol.getIDOrNew("quotient"))
+                        if (sym == try Symbol.getOrRegister("quotient"))
                             return .{ try quotient(args), new_env };
-                        if (sym == try Symbol.getIDOrNew("modulo"))
+                        if (sym == try Symbol.getOrRegister("modulo"))
                             return .{ try modulo(args), new_env };
-                        if (sym == try Symbol.getIDOrNew("="))
+                        if (sym == try Symbol.getOrRegister("="))
                             return .{ eq(args[0], args[1]), new_env };
-                        if (sym == try Symbol.getIDOrNew("<"))
+                        if (sym == try Symbol.getOrRegister("<"))
                             return .{ le(args[0], args[1]), new_env };
-                        if (sym == try Symbol.getIDOrNew("<="))
+                        if (sym == try Symbol.getOrRegister("<="))
                             return .{ leq(args[0], args[1]), new_env };
-                        if (sym == try Symbol.getIDOrNew(">"))
+                        if (sym == try Symbol.getOrRegister(">"))
                             return .{ ge(args[0], args[1]), new_env };
-                        if (sym == try Symbol.getIDOrNew(">="))
+                        if (sym == try Symbol.getOrRegister(">="))
                             return .{ geq(args[0], args[1]), new_env };
-                        if (sym == try Symbol.getIDOrNew("or"))
+                        if (sym == try Symbol.getOrRegister("or"))
                             return .{ or_(args), new_env };
-                        if (sym == try Symbol.getIDOrNew("and"))
+                        if (sym == try Symbol.getOrRegister("and"))
                             return .{ and_(args), new_env };
-                        if (sym == try Symbol.getIDOrNew("length"))
+                        if (sym == try Symbol.getOrRegister("length"))
                             return .{ try length(args[0]), new_env };
-                        if (sym == try Symbol.getIDOrNew("null?"))
+                        if (sym == try Symbol.getOrRegister("null?"))
                             return .{ null_(args[0]), new_env };
                     }
 
@@ -169,9 +154,22 @@ fn toEvaledSlice(head: ValueRef, env: Map) !struct { []ValueRef, Map } {
 
 const Func = fn ([]ValueRef, env: Map) anyerror!EvalResult;
 
-const funcs = [_]Func{
-    if_,
-};
+pub fn init() !void {
+    try Symbol.registerMany(special_form_names, special_form_mask);
+}
+
+fn special_form(sid: SymbolID) ?*const Func {
+    return if (sid & special_form_mask != 0) special_form_funcs[sid ^ special_form_mask] else null;
+}
+
+const special_form_mask: SymbolID = 1 << 30;
+const special_form_names = [_][]const u8{ "quote", "begin", "define", "lambda", "if", "cond", "let" };
+const special_form_funcs = [_]*const Func{ quote, begin, defineFunction, lambda, if_, cond, let };
+
+// special form
+fn quote(args: []ValueRef, env: Map) anyerror!EvalResult {
+    return .{ args[0], env };
+}
 
 // special form
 fn if_(args: []ValueRef, env: Map) anyerror!EvalResult {
@@ -206,7 +204,9 @@ fn isF(x: ValueRef) bool {
 }
 
 // special form
-fn let(pairs: ValueRef, expr: ValueRef, env: Map) anyerror!EvalResult {
+fn let(args: []ValueRef, env: Map) anyerror!EvalResult {
+    const pairs = args[0];
+    const expr = args[1];
     const pairsSlice = try toSlice(pairs);
     const n = pairsSlice.len;
 
@@ -233,7 +233,9 @@ fn let(pairs: ValueRef, expr: ValueRef, env: Map) anyerror!EvalResult {
 // special form
 // (define (head args) body ...+)
 // The scope is lexical, i.e., the returning 'env' value is a snapshot of the parser's env.
-fn defineFunction(params: ValueRef, body: []ValueRef, env: Map) anyerror!EvalResult {
+fn defineFunction(args: []ValueRef, env: Map) anyerror!EvalResult {
+    const params = args[0];
+    const body = args[1..];
     std.debug.assert(body.len != 0); // Ill-formed special form
     const slice = try toSlice(params);
     const name = slice[0];
@@ -255,7 +257,9 @@ fn defineValue() anyerror!ValueRef {
     unreachable;
 }
 
-fn lambda(params: ValueRef, body: []ValueRef, env: Map) anyerror!EvalResult {
+fn lambda(args: []ValueRef, env: Map) anyerror!EvalResult {
+    const params = args[0];
+    const body = args[1..];
     var sym_params = std.ArrayList(Symbol.SymbolID).init(alloc);
     {
         var tmp = try toSlice(params);
@@ -271,11 +275,10 @@ fn lambda(params: ValueRef, body: []ValueRef, env: Map) anyerror!EvalResult {
 }
 
 // special form
-fn begin(x: ValueRef, env: Map) anyerror!EvalResult {
-    const slice = try toSlice(x);
+fn begin(args: []ValueRef, env: Map) anyerror!EvalResult {
     var ret = common.empty();
     var new_env = try env.clone();
-    for (slice) |p| ret, new_env = try evaluate(p, new_env);
+    for (args) |p| ret, new_env = try evaluate(p, new_env);
     return .{ ret, new_env }; // return the last result
 }
 
