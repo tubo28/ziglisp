@@ -12,7 +12,6 @@ pub fn init() !void {
     to_id = std.StringHashMap(SymbolID).init(common.alloc);
     to_str = std.AutoHashMap(SymbolID, []const u8).init(common.alloc);
     try registerMany(preset_names, preset_mask);
-    try registerMany(builtin_func_names, builtin_func_mask);
 }
 
 pub fn registerMany(names: anytype, begin: SymbolID) !void {
@@ -39,12 +38,5 @@ pub fn getName(s: SymbolID) ?[]const u8 {
     return to_str.get(s);
 }
 
-pub fn isBuiltinFunc(id: SymbolID) bool {
-    return id & builtin_func_mask != 0;
-}
-
 const preset_mask: SymbolID = 1 << 31;
 const preset_names = [_][]const u8{ "#f", "#t" };
-
-const builtin_func_mask: SymbolID = 1 << 29;
-const builtin_func_names = [_][]const u8{ "car", "cdr", "cons", "list", "print", "+", "-", "*", "=", "<", "<=", ">", ">=", "or", "and", "length", "null?", "quotient", "modulo" };
