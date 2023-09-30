@@ -3,6 +3,8 @@ const std = @import("std");
 const V = common.ValueRef;
 const Map = common.Map;
 
+const Symbol = @import("symbol.zig");
+
 const common = @import("common.zig");
 const toString = common.toString;
 const alloc = common.alloc;
@@ -13,6 +15,7 @@ const P = @import("parse.zig");
 const E = @import("evaluate.zig");
 
 pub fn main() !void {
+    try Symbol.init();
     const args = try std.process.argsAlloc(common.alloc);
     if (args.len == 2) {
         try evalFile(args[1]);
@@ -92,6 +95,9 @@ fn parse(code: []const u8) ![]V {
 }
 
 test "tokenize" {
+    std.testing.log_level = std.log.Level.debug;
+    try Symbol.init();
+
     const TestCase = struct {
         code: []const u8,
         want: []V,
@@ -228,12 +234,10 @@ test "tokenize" {
         },
     };
 
-    std.testing.log_level = std.log.Level.debug;
     for (cases, 1..) |c, i| {
         const code = c.code;
         std.log.debug("test {}: {s}", .{ i, code });
         const get, _ = try eval(code, try evalBuiltin());
-        std.log.debug("get: {}", .{get});
         try std.testing.expect(E.deepEql(get, c.want[c.want.len - 1]));
         std.log.info("test result: ok", .{});
     }

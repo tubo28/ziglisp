@@ -10,6 +10,8 @@ const toString = common.toString;
 const ValueRef = common.ValueRef;
 const Value = common.Value;
 
+const Symbol = @import("symbol.zig");
+
 const Token = @import("tokenize.zig").Token;
 
 pub const EvalResult = struct { ValueRef, Map };
@@ -36,23 +38,23 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
                 Value.function => @panic("unimplemented"),
                 Value.symbol => |sym| {
                     const eql = std.mem.eql;
+                    _ = eql;
 
-                    // Special forms.
-                    {
+                    if (Symbol.isSpecialForm(sym)) { // TODO: Change isSpecialForm to return option
                         const args = try toSlice(cdr(x));
-                        if (eql(u8, sym, "quote"))
+                        if (sym == try Symbol.getIDOrNew("quote"))
                             return .{ args[0], env };
-                        if (eql(u8, sym, "begin"))
+                        if (sym == try Symbol.getIDOrNew("begin"))
                             return begin(cdr(x), env);
-                        if (eql(u8, sym, "define"))
+                        if (sym == try Symbol.getIDOrNew("define"))
                             return defineFunction(args[0], args[1..], env);
-                        if (eql(u8, sym, "lambda"))
+                        if (sym == try Symbol.getIDOrNew("lambda"))
                             return lambda(args[0], args[1..], env);
-                        if (eql(u8, sym, "if"))
-                            return if_(args[0], args[1], if (args.len >= 3) args[2] else null, env);
-                        if (eql(u8, sym, "cond"))
+                        if (sym == try Symbol.getIDOrNew("if"))
+                            return funcs[0](args, env);
+                        if (sym == try Symbol.getIDOrNew("cond"))
                             return cond(args, env);
-                        if (eql(u8, sym, "let"))
+                        if (sym == try Symbol.getIDOrNew("let"))
                             return let(args[0], args[1], env);
                     }
 
@@ -71,56 +73,49 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
 
                     // Built-in functions.
                     // TODO: Move some of them to another file and read it with @embedFile
-                    builtin: {
-                        // Traverse the list of built-in functions to check the existence of function
-                        // in order not to call toEvaledSlice meaninglessly.
-                        const names = [_][]const u8{ "car", "cdr", "cons", "list", "print", "+", "-", "*", "=", "<", "<=", ">", ">=", "or", "and", "length", "null?", "quotient", "modulo" };
-                        var found = false;
-                        for (names) |n| found = found or eql(u8, sym, n);
-                        if (!found) break :builtin;
-
+                    if (Symbol.isBuiltinFunc(sym)) {
                         const args, const new_env = try toEvaledSlice(cdr(x), env);
-                        if (eql(u8, sym, "car"))
+                        if (sym == try Symbol.getIDOrNew("car"))
                             return .{ car(args[0]), new_env };
-                        if (eql(u8, sym, "cdr"))
+                        if (sym == try Symbol.getIDOrNew("cdr"))
                             return .{ cdr(args[0]), new_env };
-                        if (eql(u8, sym, "cons"))
+                        if (sym == try Symbol.getIDOrNew("cons"))
                             return .{ try cons_(args[0], args[1]), new_env };
-                        if (eql(u8, sym, "list"))
+                        if (sym == try Symbol.getIDOrNew("list"))
                             return .{ try list(args), new_env };
-                        if (eql(u8, sym, "print"))
+                        if (sym == try Symbol.getIDOrNew("print"))
                             return .{ try print(args[0]), new_env };
-                        if (eql(u8, sym, "+"))
+                        if (sym == try Symbol.getIDOrNew("+"))
                             return .{ try add(args), new_env };
-                        if (eql(u8, sym, "-"))
+                        if (sym == try Symbol.getIDOrNew("-"))
                             return .{ try sub(args), new_env };
-                        if (eql(u8, sym, "*"))
+                        if (sym == try Symbol.getIDOrNew("*"))
                             return .{ try mul(args), new_env };
-                        if (eql(u8, sym, "quotient"))
+                        if (sym == try Symbol.getIDOrNew("quotient"))
                             return .{ try quotient(args), new_env };
-                        if (eql(u8, sym, "modulo"))
+                        if (sym == try Symbol.getIDOrNew("modulo"))
                             return .{ try modulo(args), new_env };
-                        if (eql(u8, sym, "="))
+                        if (sym == try Symbol.getIDOrNew("="))
                             return .{ eq(args[0], args[1]), new_env };
-                        if (eql(u8, sym, "<"))
+                        if (sym == try Symbol.getIDOrNew("<"))
                             return .{ le(args[0], args[1]), new_env };
-                        if (eql(u8, sym, "<="))
+                        if (sym == try Symbol.getIDOrNew("<="))
                             return .{ leq(args[0], args[1]), new_env };
-                        if (eql(u8, sym, ">"))
+                        if (sym == try Symbol.getIDOrNew(">"))
                             return .{ ge(args[0], args[1]), new_env };
-                        if (eql(u8, sym, ">="))
+                        if (sym == try Symbol.getIDOrNew(">="))
                             return .{ geq(args[0], args[1]), new_env };
-                        if (eql(u8, sym, "or"))
+                        if (sym == try Symbol.getIDOrNew("or"))
                             return .{ or_(args), new_env };
-                        if (eql(u8, sym, "and"))
+                        if (sym == try Symbol.getIDOrNew("and"))
                             return .{ and_(args), new_env };
-                        if (eql(u8, sym, "length"))
+                        if (sym == try Symbol.getIDOrNew("length"))
                             return .{ try length(args[0]), new_env };
-                        if (eql(u8, sym, "null?"))
+                        if (sym == try Symbol.getIDOrNew("null?"))
                             return .{ null_(args[0]), new_env };
                     }
 
-                    std.log.err("function or special form not defined: {s}\n", .{sym});
+                    std.log.err("function or special form not defined: {s} ({})\n", .{ Symbol.getName(sym).?, sym });
                     unreachable;
                 },
             }
@@ -131,7 +126,8 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
 fn callFunction(x: ValueRef, args: []ValueRef) anyerror!ValueRef {
     const func = x.function;
     if (func.params.len != args.len) {
-        std.log.err("wrong number of argument for {s}", .{func.name orelse "lambda"});
+        const name = if (func.name) |n| Symbol.getName(n).? else "<lambda>";
+        std.log.err("wrong number of argument for {s}", .{name});
         @panic("wrong number of arguments for function");
     }
 
@@ -171,8 +167,17 @@ fn toEvaledSlice(head: ValueRef, env: Map) !struct { []ValueRef, Map } {
     return .{ ret, e };
 }
 
+const Func = fn ([]ValueRef, env: Map) anyerror!EvalResult;
+
+const funcs = [_]Func{
+    if_,
+};
+
 // special form
-fn if_(pred: ValueRef, then: ValueRef, unless: ?ValueRef, env: Map) anyerror!EvalResult {
+fn if_(args: []ValueRef, env: Map) anyerror!EvalResult {
+    const pred = args[0];
+    const then = args[1];
+    const unless = if (args.len >= 3) args[2] else null;
     const p, const new_env = try evaluate(pred, env);
     if (toBool(p)) return try evaluate(then, new_env);
     if (unless) |u| return try evaluate(u, new_env);
@@ -205,7 +210,7 @@ fn let(pairs: ValueRef, expr: ValueRef, env: Map) anyerror!EvalResult {
     const pairsSlice = try toSlice(pairs);
     const n = pairsSlice.len;
 
-    var keys: [][]const u8 = try alloc.alloc([]const u8, n);
+    var keys: []Symbol.SymbolID = try alloc.alloc(Symbol.SymbolID, n);
     defer alloc.free(keys);
     var vals: []ValueRef = try alloc.alloc(ValueRef, n);
     defer alloc.free(vals);
@@ -233,7 +238,7 @@ fn defineFunction(params: ValueRef, body: []ValueRef, env: Map) anyerror!EvalRes
     const slice = try toSlice(params);
     const name = slice[0];
 
-    var sym_params = std.ArrayList([]const u8).init(alloc);
+    var sym_params = std.ArrayList(Symbol.SymbolID).init(alloc);
     for (slice[1..]) |arg| try sym_params.append(symbolp(arg).?);
     const sym_name = symbolp(name).?;
     const func = try common.newFunctionValue(
@@ -251,7 +256,7 @@ fn defineValue() anyerror!ValueRef {
 }
 
 fn lambda(params: ValueRef, body: []ValueRef, env: Map) anyerror!EvalResult {
-    var sym_params = std.ArrayList([]const u8).init(alloc);
+    var sym_params = std.ArrayList(Symbol.SymbolID).init(alloc);
     {
         var tmp = try toSlice(params);
         for (tmp) |a| try sym_params.append(symbolp(a).?);
@@ -320,7 +325,7 @@ fn numberp(atom: ValueRef) ?i64 {
 }
 
 // built-in func
-fn symbolp(atom: ValueRef) ?[]const u8 {
+fn symbolp(atom: ValueRef) ?Symbol.SymbolID {
     switch (atom.*) {
         Value.symbol => |sym| return sym,
         else => return null,
@@ -437,7 +442,7 @@ pub fn deepEql(x: ValueRef, y: ValueRef) bool {
             else => return false,
         },
         Value.symbol => |x_| switch (y.*) {
-            Value.symbol => |y_| return std.mem.eql(u8, x_, y_),
+            Value.symbol => |y_| return x_ == y_,
             else => return false,
         },
         Value.cons => |x_| switch (y.*) {
@@ -446,7 +451,7 @@ pub fn deepEql(x: ValueRef, y: ValueRef) bool {
         },
         Value.function => |x_| switch (y.*) {
             Value.function => |y_| {
-                if (x_.name != null and y_.name != null) return std.mem.eql(u8, x_.name.?, y_.name.?); // just comparing name
+                if (x_.name != null and y_.name != null) return x_.name.? == y_.name.?; // just comparing name
                 if (x_.name == null and y_.name == null) return true;
                 return false;
             },
@@ -455,7 +460,7 @@ pub fn deepEql(x: ValueRef, y: ValueRef) bool {
     }
 }
 
-fn putPure(env: Map, key: []const u8, val: ValueRef) !Map {
+fn putPure(env: Map, key: Symbol.SymbolID, val: ValueRef) !Map {
     var ret = try env.clone();
     try ret.put(key, val);
     return ret;
