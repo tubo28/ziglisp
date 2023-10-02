@@ -212,6 +212,10 @@ test "tokenize" {
             .want = try parse("(1 1 2 3 3 4 5 5 5 6 7 8 9 9 9)"),
         },
         TestCase{
+            .code = @embedFile("examples/quicksort.scm"),
+            .want = try parse("(1 1 2 3 3 4 5 5 5 6 7 8 9 9 9)"),
+        },
+        TestCase{
             .code = @embedFile("examples/tarai.scm"),
             .want = try parse("8"),
         },
