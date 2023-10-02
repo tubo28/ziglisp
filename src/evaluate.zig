@@ -131,8 +131,8 @@ pub const BuiltinFunction = fn ([]ValueRef) anyerror!ValueRef;
 
 pub const BuiltinSpecialForm = fn ([]ValueRef, Map) anyerror!EvalResult;
 
-const builtin_func_names = [_][]const u8{ "car", "cdr", "cons", "list", "print", "+", "-", "*", "=", "<", "or", "and", "length", "null?", "quotient", "modulo" };
-const builtin_func_funcs = [_]*const BuiltinFunction{ car, cdr, cons_, list, print, add, sub, mul, eq, le, or_, and_, length, null_, quotient, modulo };
+const builtin_func_names = [_][]const u8{ "car", "cdr", "cons", "list", "print", "+", "-", "*", "=", "<", "or", "and", "null?", "quotient", "modulo" };
+const builtin_func_funcs = [_]*const BuiltinFunction{ car, cdr, cons_, list, print, add, sub, mul, eq, le, or_, and_, null_, quotient, modulo };
 
 const special_form_names = [_][]const u8{ "quote", "begin", "define", "lambda", "if", "cond", "let" };
 const special_form_funcs = [_]*const BuiltinSpecialForm{ quote, begin, defineFunction, lambda, if_, cond, let };
@@ -359,12 +359,6 @@ fn toValue(x: bool) anyerror!ValueRef {
 // built-in func
 fn le(args: []ValueRef) anyerror!ValueRef {
     return toValue(args[0].number < args[1].number);
-}
-
-// built-in func
-fn length(x: []ValueRef) anyerror!ValueRef {
-    const slice = try toSlice(x[0]);
-    return common.newNumberValue(@intCast(slice.len));
 }
 
 // built-in func
