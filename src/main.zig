@@ -15,8 +15,6 @@ const P = @import("parse.zig");
 const E = @import("evaluate.zig");
 
 pub fn main() !void {
-    try Symbol.init();
-    try E.init();
     const args = try std.process.argsAlloc(common.alloc);
     if (args.len == 2) {
         try evalFile(args[1]);
@@ -34,7 +32,7 @@ fn evalFile(filepath: []const u8) !void {
 
     var buf: [65536]u8 = undefined;
     const size = try in_stream.readAll(&buf);
-    var env = try evalBuiltin();
+    var env = try loadBuiltin();
     _ = try eval(buf[0..size], env);
 }
 
@@ -42,7 +40,7 @@ fn repl() !void {
     const stdin = std.io.getStdIn().reader();
     const stdout = std.io.getStdOut().writer();
 
-    var env = try evalBuiltin();
+    var env = try loadBuiltin();
     while (true) {
         try stdout.print(">>> ", .{});
         const line = readLine(stdin) catch |err| switch (err) {
@@ -76,14 +74,14 @@ fn eval(code: []const u8, env: Map) !struct { V, Map } {
     return .{ ret, new_env };
 }
 
-fn evalBuiltin() !Map {
+fn loadBuiltin() !Map {
+    try Symbol.init();
+    var env = try E.loadBuiltin();
     const code = @embedFile("builtin.scm");
     const tokens = try T.tokenize(code);
     const sexprs = try P.parse(tokens);
-    var ret = common.empty();
-    var new_env = Map.init(alloc);
-    for (sexprs) |expr| ret, new_env = try E.evaluate(expr, new_env);
-    return new_env;
+    for (sexprs) |expr| _, env = try E.evaluate(expr, env);
+    return env;
 }
 
 fn parse(code: []const u8) ![]V {
@@ -97,9 +95,8 @@ fn parse(code: []const u8) ![]V {
 
 test "tokenize" {
     std.testing.log_level = std.log.Level.debug;
-    try Symbol.init();
-    try E.init();
 
+    const env = try loadBuiltin();
     const TestCase = struct {
         code: []const u8,
         want: []V,
@@ -239,7 +236,7 @@ test "tokenize" {
     for (cases, 1..) |c, i| {
         const code = c.code;
         std.log.debug("test {}: {s}", .{ i, code });
-        const get, _ = try eval(code, try evalBuiltin());
+        const get, _ = try eval(code, env);
         try std.testing.expect(E.deepEql(get, c.want[c.want.len - 1]));
         std.log.info("test result: ok", .{});
     }

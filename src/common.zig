@@ -7,6 +7,7 @@ const Symbol = @import("symbol.zig");
 const SymbolID = Symbol.ID;
 
 pub const Map = std.AutoHashMap(SymbolID, ValueRef); // TODO: Dependency for env
+pub const EvalResult = struct { ValueRef, Map };
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 pub const alloc = gpa.allocator();
@@ -26,10 +27,24 @@ pub fn newCons(car: ValueRef, cdr: ValueRef) !*Cons {
 /// It is a branch only if cons, otherwise leaf.
 pub const Value = union(enum) {
     number: i64,
-    symbol: SymbolID, // ID
+    symbol: SymbolID,
     cons: *const Cons,
     function: *const Function,
+    b_function: usize, // Index of table
+    b_special_form: usize,
 };
+
+pub fn newBFunctionValue(i: usize) !ValueRef {
+    var ret = try alloc.create(Value);
+    ret.* = Value{ .b_function = i };
+    return ret;
+}
+
+pub fn newBSpecialForm(i: usize) !ValueRef {
+    var ret = try alloc.create(Value);
+    ret.* = Value{ .b_special_form = i };
+    return ret;
+}
 
 pub fn newConsValue(car: ValueRef, cdr: ValueRef) !ValueRef {
     var ret = try alloc.create(Value);
@@ -148,6 +163,8 @@ fn toStringInner(cell: ValueRef, builder: *std.ArrayList(u8)) anyerror!void {
                 try builder.appendSlice("<lambda>");
             }
         },
+        Value.b_function => try builder.appendSlice("<builtin function>"),
+        Value.b_special_form => try builder.appendSlice("<builtin special form>"),
     }
 }
 

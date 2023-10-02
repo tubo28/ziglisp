@@ -11,14 +11,6 @@ pub fn init() !void {
     sid = 1;
     to_id = std.StringHashMap(ID).init(common.alloc);
     to_str = std.AutoHashMap(ID, []const u8).init(common.alloc);
-    try registerMany(preset_names, preset_mask);
-}
-
-pub fn registerMany(names: anytype, begin: ID) !void {
-    for (names, begin..) |s, i| {
-        try to_id.put(s, @intCast(i));
-        try to_str.put(@intCast(i), s);
-    }
 }
 
 // Find the symbol ID or register if new.
@@ -32,6 +24,13 @@ pub fn getOrRegister(s: []const u8) !ID {
     try to_id.put(s, sid);
     try to_str.put(sid, s);
     return sid;
+}
+
+pub fn registerUnsafe(s: []const u8, id: ID) !void {
+    std.debug.assert(to_id.get(s) == null);
+    std.debug.assert(to_str.get(id) == null);
+    try to_id.put(s, id);
+    try to_str.put(id, s);
 }
 
 pub fn getName(s: ID) ?[]const u8 {

@@ -8,6 +8,7 @@ const t = common.t;
 const f = common.f;
 const toString = common.toString;
 const ValueRef = common.ValueRef;
+const EvalResult = common.EvalResult;
 const Value = common.Value;
 
 const Symbol = @import("symbol.zig");
@@ -15,12 +16,10 @@ const SymbolID = Symbol.ID;
 
 const Token = @import("tokenize.zig").Token;
 
-pub const EvalResult = struct { ValueRef, Map };
-
 pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
     switch (x.*) {
         Value.number => return .{ x, env },
-        Value.function => unreachable,
+        Value.function, Value.b_function, Value.b_special_form => unreachable,
         Value.symbol => |sym| return if (env.get(sym)) |ent| .{ ent, env } else .{ x, env },
         Value.cons => |cons| {
             if (x == common.empty()) {
@@ -34,10 +33,16 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
                     const l, var new_env = try evaluate(cons.car, env);
                     return call(l.function, cons.cdr, new_env);
                 },
-                Value.function => @panic("unimplemented"),
+                Value.function, Value.b_function, Value.b_special_form => @panic("unimplemented"),
                 Value.symbol => |sym| {
-                    // User-defined functions.
-                    if (env.get(sym)) |func| return call(func.function, cons.cdr, env);
+                    if (env.get(sym)) |func| {
+                        return switch (func.*) {
+                            Value.function => |f_| call(f_, cons.cdr, env),
+                            Value.b_function => |bf| call(builtin_func_funcs[bf], cons.cdr, env),
+                            Value.b_special_form => |bs| call(special_form_funcs[bs], cons.cdr, env),
+                            else => unreachable,
+                        };
+                    }
                     // switch (func.*) {
                     //     Value.function => |ff| return .{ try callFunction(ff, args), env },
                     //     // I can't remember why I wrote this code
@@ -47,8 +52,6 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
                     //     // },
                     //     else => @panic("symbol not binded to function"),
                     // }
-                    if (special_form(sym)) |func| return call(func, cons.cdr, env);
-                    if (builtin_func(sym)) |func| return call(func, cons.cdr, env);
                     std.log.err("function or special form not defined: {s} ({})\n", .{ Symbol.getName(sym).?, sym });
                     unreachable;
                 },
@@ -60,8 +63,8 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
 fn call(val: anytype, args: ValueRef, env: Map) anyerror!EvalResult {
     const ty = @TypeOf(val);
     switch (ty) {
-        *const SpecialForm => return val(try toSlice(args), env),
-        *const BuiltinFunc => {
+        *const BuiltinSpecialForm => return val(try toSlice(args), env),
+        *const BuiltinFunction => {
             const argSlice, const new_env = try toSliceE(args, env);
             return .{ try val(argSlice), new_env };
         },
@@ -124,27 +127,31 @@ fn toSliceE(head: ValueRef, env: Map) !struct { []ValueRef, Map } {
     return .{ ret, e };
 }
 
-pub fn init() !void {
-    try Symbol.registerMany(special_form_names, special_form_mask);
-    try Symbol.registerMany(builtin_func_names, builtin_func_mask);
-}
+pub const BuiltinFunction = fn ([]ValueRef) anyerror!ValueRef;
 
-const special_form_mask: SymbolID = 1 << 30;
-const SpecialForm = fn ([]ValueRef, Map) anyerror!EvalResult;
-const special_form_names = [_][]const u8{ "quote", "begin", "define", "lambda", "if", "cond", "let" };
-const special_form_funcs = [_]*const SpecialForm{ quote, begin, defineFunction, lambda, if_, cond, let };
-fn special_form(sid: SymbolID) ?*const SpecialForm {
-    return if (sid & special_form_mask != 0) special_form_funcs[sid ^ special_form_mask] else null;
-}
+pub const BuiltinSpecialForm = fn ([]ValueRef, Map) anyerror!EvalResult;
 
-const BuiltinFunc = fn ([]ValueRef) anyerror!ValueRef;
-fn builtin_func(sid: SymbolID) ?*const BuiltinFunc {
-    return if (sid & builtin_func_mask != 0) builtin_func_funcs[sid ^ builtin_func_mask] else null;
-}
-const builtin_func_mask: SymbolID = 1 << 29;
 const builtin_func_names = [_][]const u8{ "car", "cdr", "cons", "list", "print", "+", "-", "*", "=", "<", "or", "and", "length", "null?", "quotient", "modulo" };
-// TODO: Move some of list items to another file and read it with @embedFile
-const builtin_func_funcs = [_]*const BuiltinFunc{ car, cdr, cons_, list, print, add, sub, mul, eq, le, or_, and_, length, null_, quotient, modulo };
+const builtin_func_funcs = [_]*const BuiltinFunction{ car, cdr, cons_, list, print, add, sub, mul, eq, le, or_, and_, length, null_, quotient, modulo };
+
+const special_form_names = [_][]const u8{ "quote", "begin", "define", "lambda", "if", "cond", "let" };
+const special_form_funcs = [_]*const BuiltinSpecialForm{ quote, begin, defineFunction, lambda, if_, cond, let };
+
+pub fn loadBuiltin() !Map {
+    var ret = Map.init(alloc);
+    for (builtin_func_names, 0..) |name, index| {
+        const sid = @as(u32, @intCast(index)) + 100_000_000;
+        try Symbol.registerUnsafe(name, sid);
+        try ret.put(sid, try common.newBFunctionValue(index));
+    }
+
+    for (special_form_names, 0..) |name, index| {
+        const sid = @as(u32, @intCast(index)) + 200_000_000;
+        try Symbol.registerUnsafe(name, sid);
+        try ret.put(sid, try common.newBSpecialForm(index));
+    }
+    return ret;
+}
 
 // special form
 fn quote(args: []ValueRef, env: Map) anyerror!EvalResult {
@@ -407,6 +414,14 @@ pub fn deepEql(x: ValueRef, y: ValueRef) bool {
         },
         Value.symbol => |x_| switch (y.*) {
             Value.symbol => |y_| return x_ == y_,
+            else => return false,
+        },
+        Value.b_function => |x_| switch (y.*) {
+            Value.b_function => |y_| return x_ == y_,
+            else => return false,
+        },
+        Value.b_special_form => |x_| switch (y.*) {
+            Value.b_special_form => |y_| return x_ == y_,
             else => return false,
         },
         Value.cons => |x_| switch (y.*) {
