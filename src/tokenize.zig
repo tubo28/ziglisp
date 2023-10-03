@@ -64,30 +64,21 @@ pub fn tokenize(code: []const u8) ![]const Token {
             continue;
         }
 
-        if (ascii.isDigit(code[i])) {
+        if (isSymbolChar(code[i])) {
             var begin = i;
-            while (i < code.len and ascii.isDigit(code[i]))
-                i += 1;
-            const val = try std.fmt.parseInt(i64, code[begin..i], 10);
-            try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind{ .int = val } });
-            continue;
-        }
+            while (i < code.len and isSymbolChar(code[i])) i += 1;
 
-        // All other chars are parts of as symbol.
-        {
-            var begin = i;
-            while (i < code.len and isSymbolChar(code[i]))
-                i += 1;
-            const sym = code[begin..i];
-            // special symbol
-            if (std.mem.eql(u8, sym, "#f")) {
+            const tok = code[begin..i];
+            if (std.fmt.parseInt(i64, tok, 0) catch null) |int| {
+                try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind{ .int = int } });
+            } else if (std.mem.eql(u8, tok, "#f")) {
                 try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind.f });
-                continue;
+            } else {
+                try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind{ .symbol = try Symbol.getOrRegister(tok) } });
             }
-            const sid = try Symbol.getOrRegister(sym);
-            try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind{ .symbol = sid } });
             continue;
         }
+        unreachable;
     }
     return toks.items;
 }
