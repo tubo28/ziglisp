@@ -1,5 +1,5 @@
 const std = @import("std");
-pub const assert = std.debug.assert;
+const assert = std.debug.assert;
 
 const Token = @import("tokenize.zig").Token;
 const TokenKind = @import("tokenize.zig").TokenKind;

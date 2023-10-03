@@ -13,6 +13,7 @@ const Value = common.Value;
 const T = @import("tokenize.zig");
 const P = @import("parse.zig");
 const E = @import("evaluate.zig");
+const B = @import("builtin.zig");
 
 pub fn main() !void {
     const args = try std.process.argsAlloc(common.alloc);
@@ -76,7 +77,7 @@ fn eval(code: []const u8, env: Map) !struct { V, Map } {
 
 fn loadBuiltin() !Map {
     try Symbol.init();
-    var env = try E.loadBuiltin();
+    var env = try B.loadBuiltin();
     const code = @embedFile("builtin.scm");
     const tokens = try T.tokenize(code);
     const sexprs = try P.parse(tokens);
@@ -241,7 +242,7 @@ test "tokenize" {
         const code = c.code;
         std.log.debug("test {}: {s}", .{ i, code });
         const get, _ = try eval(code, env);
-        try std.testing.expect(E.deepEql(get, c.want[c.want.len - 1]));
+        try std.testing.expect(common.deepEql(get, c.want[c.want.len - 1]));
         std.log.info("test result: ok", .{});
     }
 }

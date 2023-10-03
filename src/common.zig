@@ -30,19 +30,19 @@ pub const Value = union(enum) {
     symbol: SymbolID,
     cons: *const Cons,
     function: *const Function,
-    b_function: usize, // Index of table
-    b_special_form: usize,
+    b_func: usize, // Index of table
+    b_spf: usize,
 };
 
 pub fn newBFunctionValue(i: usize) !ValueRef {
     var ret = try alloc.create(Value);
-    ret.* = Value{ .b_function = i };
+    ret.* = Value{ .b_func = i };
     return ret;
 }
 
 pub fn newBSpecialForm(i: usize) !ValueRef {
     var ret = try alloc.create(Value);
-    ret.* = Value{ .b_special_form = i };
+    ret.* = Value{ .b_spf = i };
     return ret;
 }
 
@@ -126,6 +126,64 @@ pub fn t() ValueRef {
     return t_opt.?;
 }
 
+// Convert sequence of cons cell like (foo bar buz) to slice.
+pub fn toSlice(head: ValueRef) ![]ValueRef {
+    std.debug.assert(atomp(head) == null); // is cons?
+
+    var ret = std.ArrayList(ValueRef).init(alloc); // defer deinit?
+    var h = head;
+    while (h != empty()) {
+        // TODO: Check that h is cons
+        const x = h.cons.car;
+        ret.append(x) catch @panic("cannot append");
+        h = h.cons.cdr;
+    }
+    return try ret.toOwnedSlice();
+}
+
+fn atomp(cons: ValueRef) ?ValueRef {
+    switch (cons.*) {
+        Value.cons => return null,
+        else => return cons,
+    }
+}
+
+/// The "deep equal" function for values.
+/// Equality of function values are only based on the names.
+pub fn deepEql(x: ValueRef, y: ValueRef) bool {
+    if (x == empty() or y == empty()) return x == y;
+    switch (x.*) {
+        Value.number => |x_| switch (y.*) {
+            Value.number => |y_| return x_ == y_,
+            else => return false,
+        },
+        Value.symbol => |x_| switch (y.*) {
+            Value.symbol => |y_| return x_ == y_,
+            else => return false,
+        },
+        Value.b_func => |x_| switch (y.*) {
+            Value.b_func => |y_| return x_ == y_,
+            else => return false,
+        },
+        Value.b_spf => |x_| switch (y.*) {
+            Value.b_spf => |y_| return x_ == y_,
+            else => return false,
+        },
+        Value.cons => |x_| switch (y.*) {
+            Value.cons => |y_| return deepEql(x_.car, y_.car) and deepEql(x_.cdr, y_.cdr),
+            else => return false,
+        },
+        Value.function => |x_| switch (y.*) {
+            Value.function => |y_| {
+                if (x_.name != null and y_.name != null) return x_.name.? == y_.name.?; // just comparing name
+                if (x_.name == null and y_.name == null) return true;
+                return false;
+            },
+            else => return false,
+        },
+    }
+}
+
 pub fn toString(cell: ValueRef) ![]const u8 {
     var buf = std.ArrayList(u8).init(alloc);
     defer buf.deinit();
@@ -163,8 +221,8 @@ fn toStringInner(cell: ValueRef, builder: *std.ArrayList(u8)) anyerror!void {
                 try builder.appendSlice("<lambda>");
             }
         },
-        Value.b_function => try builder.appendSlice("<builtin function>"),
-        Value.b_special_form => try builder.appendSlice("<builtin special form>"),
+        Value.b_func => try builder.appendSlice("<builtin function>"),
+        Value.b_spf => try builder.appendSlice("<builtin special form>"),
     }
 }
 
