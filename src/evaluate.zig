@@ -26,59 +26,63 @@ pub fn evaluate(x: ValueRef, env: EnvRef) anyerror!EvalResult {
         Value.symbol => |sym| return if (env.get(sym)) |ent| .{ ent, env } else .{ x, env },
         Value.cons => |cons| {
             if (x == common.empty()) {
-                std.log.err("empty list cannot be evaluated", .{});
+                std.log.err("cannot evaluate empty list", .{});
                 unreachable;
             }
-            switch (cons.car.*) {
-                Value.number => @panic("number cannot be a function"),
-                Value.cons => {
-                    // Code like ((lambda (x) (+ x x)) 1) goes through here
-                    const l, var new_env = try evaluate(cons.car, env);
-                    return call(l.function, cons.cdr, new_env);
-                },
-                Value.function, Value.b_func, Value.b_spf => @panic("unimplemented"),
-                Value.symbol => |sym| {
-                    if (env.get(sym)) |func| {
-                        return switch (func.*) {
-                            Value.function => |f_| call(f_, cons.cdr, env),
-                            Value.b_func => |bf| call(Builtin.func[bf], cons.cdr, env),
-                            Value.b_spf => |bs| call(Builtin.spf[bs], cons.cdr, env),
-                            else => unreachable,
-                        };
-                    }
-                    // switch (func.*) {
-                    //     Value.function => |ff| return .{ try callFunction(ff, args), env },
-                    //     // I can't remember why I wrote this code
-                    //     // Value.cons => {
-                    //     //     const l, _ = try evaluate(func, new_env);
-                    //     //     return .{ try callFunction(l, args), env };
-                    //     // },
-                    //     else => @panic("symbol not binded to function"),
-                    // }
-                    std.log.err("function or special form not defined: {s} ({})\n", .{ Symbol.getName(sym).?, sym });
-                    unreachable;
-                },
-            }
+            // Call something
+            const c = try toCallable(cons.car, env);
+            const args = try common.toSlice(cons.cdr);
+            return call(c, args, env);
         },
     }
 }
 
-fn call(val: anytype, args: ValueRef, env: EnvRef) anyerror!EvalResult {
-    const ty = @TypeOf(val);
-    switch (ty) {
-        *const Builtin.SpecialForm => return val(try common.toSlice(args), env),
-        *const Builtin.Function => {
-            const argSlice, const new_env = try toSliceE(args, env);
-            return .{ try val(argSlice), new_env };
+const Callable = union(enum) {
+    bsf: *const Builtin.SpecialForm,
+    bfunc: *const Builtin.Function,
+    func: *const Function,
+};
+
+fn toCallable(car: *const common.Value, env: EnvRef) !Callable {
+    switch (car.*) {
+        Value.cons => {
+            // example: ((lambda (x) (+ x x)) 1)
+            const lmd, _ = try evaluate(car, env);
+            return Callable{ .func = lmd.function };
         },
-        *const Function => { // lambda or define
-            const argSlice, const new_env = try toSliceE(args, env);
-            return .{ try callFunction(val, argSlice), new_env };
+        Value.symbol => |sym| {
+            const func = env.get(sym);
+            if (func == null) {
+                std.log.err("symbol `{s}` is not callable", .{Symbol.getName(sym).?});
+                unreachable;
+            }
+            switch (func.?.*) {
+                Value.function => |f_| return Callable{ .func = f_ },
+                Value.b_func => |bf| return Callable{ .bfunc = Builtin.func[bf] },
+                Value.b_spf => |bs| return Callable{ .bsf = Builtin.spf[bs] },
+                else => |other| {
+                    std.log.err("symbol `{s}` is bound to non-callable value: {any}", .{ Symbol.getName(sym).?, other });
+                    unreachable;
+                },
+            }
         },
-        else => {
-            std.log.err("not callable value: {}", .{val});
-            std.log.err("ty: {}", .{ty});
+        else => |other| {
+            std.log.err("not callable: {}", .{other});
             unreachable;
+        },
+    }
+}
+
+fn call(callable: Callable, args: []ValueRef, env: EnvRef) anyerror!EvalResult {
+    switch (callable) {
+        Callable.bsf => |form| return form(args, env),
+        Callable.bfunc => |func| {
+            const argSlice, const new_env = try evalAll(args, env);
+            return .{ try func(argSlice), new_env };
+        },
+        Callable.func => |func| {
+            const argSlice, const new_env = try evalAll(args, env);
+            return .{ try callFunction(func, argSlice), new_env };
         },
     }
 }
@@ -87,16 +91,14 @@ var args_and_self_sid: [128]SymbolID = undefined;
 var args_and_self: [128]ValueRef = undefined;
 
 fn callFunction(func: *const Function, args: []ValueRef) anyerror!ValueRef {
-    //    const func = x.function;
     if (func.params.len != args.len) {
         const name = if (func.name) |n| Symbol.getName(n).? else "<lambda>";
         std.log.err("wrong number of argument for {s}", .{name});
-        @panic("wrong number of arguments for function");
+        unreachable;
     }
 
     // Evaluate arguments.
-    // Names and the function and arguments overrite function's namespace, what we call 'shadowing'.
-
+    // Names and the function and arguments overrite function's namespace, what we call shadowing.
     for (func.params, args, 0..) |param, arg, i| {
         args_and_self_sid[i] = param;
         args_and_self[i] = arg;
@@ -117,9 +119,9 @@ fn callFunction(func: *const Function, args: []ValueRef) anyerror!ValueRef {
     return ret;
 }
 
-fn toSliceE(head: ValueRef, env: EnvRef) !struct { []ValueRef, EnvRef } {
-    var ret = try common.toSlice(head);
+fn evalAll(slice: []ValueRef, env: EnvRef) !struct { []ValueRef, EnvRef } {
+    var ret = try alloc.alloc(ValueRef, slice.len);
     var e = env;
-    for (ret) |*x| x.*, e = try evaluate(x.*, e);
+    for (ret, slice) |*x, y| x.*, e = try evaluate(y, e);
     return .{ ret, e };
 }

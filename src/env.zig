@@ -26,12 +26,6 @@ pub const Env = struct {
         return ret;
     }
 
-    // pub fn put(self: *const Self, k: SymbolID, v: ValueRef) !Env {
-    //     const m = try self.map.clone();
-    //     try m.put(k, v);
-    //     return Env{ .map = m, .parent = self };
-    // }
-
     pub fn overwriteOne(self: *const Self, k: SymbolID, v: ValueRef) !Env.Ref {
         var m = try newMap();
         try m.put(k, v);
