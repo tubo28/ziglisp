@@ -1,15 +1,15 @@
 const std = @import("std");
-const common = @import("common.zig");
-const Symbol = @import("symbol.zig");
-const Evaluate = @import("evaluate.zig");
 
-const alloc = common.alloc;
-const EvalResult = common.EvalResult;
-const f = common.f;
-const t = common.t;
-const toSlice = common.toSlice;
-const Value = common.Value;
-const ValueRef = common.ValueRef;
+const C = @import("common.zig");
+const E = @import("evaluate.zig");
+const S = @import("symbol.zig");
+
+const alloc = C.alloc;
+const EvalResult = C.EvalResult;
+const f = C.f;
+const t = C.t;
+const toSlice = C.toSlice;
+const ValueRef = C.ValueRef;
 
 const Env = @import("env.zig").Env;
 const EnvRef = Env.Ref;
@@ -26,18 +26,18 @@ pub const spf = [_]*const SpecialForm{ quote, begin, defineFunction, lambda, if_
 pub fn loadBuiltin() !EnvRef {
     // Bind symbol and symbol id
     for (func_names, 100_000_000..) |name, sid|
-        try Symbol.registerUnsafe(name, sid);
+        try S.registerUnsafe(name, sid);
     for (spf_names, 200_000_000..) |name, sid|
-        try Symbol.registerUnsafe(name, sid);
+        try S.registerUnsafe(name, sid);
 
     // Bind symbol and function
-    var new_binds = std.ArrayList(struct { Symbol.ID, ValueRef }).init(alloc);
+    var new_binds = std.ArrayList(struct { S.ID, ValueRef }).init(alloc);
     defer new_binds.deinit();
 
     for (100_000_000.., 0..func.len) |sid, i|
-        try new_binds.append(.{ sid, try common.newBFunctionValue(i) });
+        try new_binds.append(.{ sid, try C.newBFunctionValue(i) });
     for (200_000_000.., 0..spf.len) |sid, i|
-        try new_binds.append(.{ sid, try common.newBSpecialForm(i) });
+        try new_binds.append(.{ sid, try C.newBSpecialForm(i) });
 
     const ret = try Env.new();
     return ret.overwrite(try new_binds.toOwnedSlice());
@@ -49,7 +49,7 @@ fn let(args: []ValueRef, env: *const Env) anyerror!EvalResult {
     const expr = args[1];
     const pairsSlice = try toSlice(pairs);
 
-    var new_binds = std.ArrayList(struct { Symbol.ID, ValueRef }).init(alloc);
+    var new_binds = std.ArrayList(struct { S.ID, ValueRef }).init(alloc);
     defer new_binds.deinit();
 
     for (pairsSlice) |p| {
@@ -57,12 +57,12 @@ fn let(args: []ValueRef, env: *const Env) anyerror!EvalResult {
         const k = keyVal[0].symbol;
         const v = keyVal[1];
         // No dependency between new values.
-        const ev, _ = try Evaluate.evaluate(v, env);
+        const ev, _ = try E.evaluate(v, env);
         try new_binds.append(.{ k, ev });
     }
 
     const new_env = try env.overwrite(try new_binds.toOwnedSlice());
-    return Evaluate.evaluate(expr, new_env);
+    return E.evaluate(expr, new_env);
 }
 
 // (define id expr)
@@ -85,10 +85,10 @@ fn defineFunction(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
     const slice = try toSlice(params);
     const name = slice[0];
 
-    var sym_params = try alloc.alloc(Symbol.ID, slice.len - 1);
+    var sym_params = try alloc.alloc(S.ID, slice.len - 1);
     for (slice[1..], 0..) |arg, i| sym_params[i] = arg.symbol;
 
-    const func_val = try common.newFunctionValue(try common.newFunction(
+    const func_val = try C.newFunctionValue(try C.newFunction(
         name.symbol,
         sym_params,
         body,
@@ -102,10 +102,10 @@ fn if_(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
     const pred = args[0];
     const then = args[1];
     const unless = if (args.len >= 3) args[2] else null;
-    const p, const new_env = try Evaluate.evaluate(pred, env);
-    if (toBool(p)) return try Evaluate.evaluate(then, new_env);
-    if (unless) |u| return try Evaluate.evaluate(u, new_env);
-    return .{ common.empty(), new_env }; // Return empty if pred is false and unless is not given.
+    const p, const new_env = try E.evaluate(pred, env);
+    if (toBool(p)) return try E.evaluate(then, new_env);
+    if (unless) |u| return try E.evaluate(u, new_env);
+    return .{ C.empty(), new_env }; // Return empty if pred is false and unless is not given.
 }
 
 // special form
@@ -115,17 +115,17 @@ fn cond(clauses: []ValueRef, env: EnvRef) anyerror!EvalResult {
         const tmp = try toSlice(c);
         const pred = tmp[0];
         const then = tmp[1];
-        const p, e = try Evaluate.evaluate(pred, e);
-        if (toBool(p)) return Evaluate.evaluate(then, e);
+        const p, e = try E.evaluate(pred, e);
+        if (toBool(p)) return E.evaluate(then, e);
     }
-    return .{ common.empty(), e }; // Return empty if all pred is false.
+    return .{ C.empty(), e }; // Return empty if all pred is false.
 }
 
 // special form
 fn begin(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
-    var ret = common.empty();
+    var ret = C.empty();
     var new_env = env;
-    for (args) |p| ret, new_env = try Evaluate.evaluate(p, new_env);
+    for (args) |p| ret, new_env = try E.evaluate(p, new_env);
     return .{ ret, new_env }; // return the last result
 }
 
@@ -141,16 +141,16 @@ fn cdr(args: []ValueRef) anyerror!ValueRef {
 
 // built-in func
 fn cons_(args: []ValueRef) anyerror!ValueRef {
-    return common.newConsValue(args[0], args[1]);
+    return C.newConsValue(args[0], args[1]);
 }
 
 // built-in func
 fn list(xs: []ValueRef) anyerror!ValueRef {
-    var ret = common.empty();
+    var ret = C.empty();
     var i = xs.len;
     while (i > 0) {
         i -= 1;
-        ret = try common.newConsValue(xs[i], ret);
+        ret = try C.newConsValue(xs[i], ret);
     }
     return ret;
 }
@@ -159,7 +159,7 @@ fn list(xs: []ValueRef) anyerror!ValueRef {
 fn add(xs: []ValueRef) anyerror!ValueRef {
     var ret: i64 = 0;
     for (xs) |x| ret += x.number;
-    return common.newNumberValue(ret);
+    return C.newNumberValue(ret);
 }
 
 // built-in func
@@ -168,7 +168,7 @@ fn sub(xs: []ValueRef) anyerror!ValueRef {
     for (xs, 0..) |x, i| {
         if (i == 0) ret += x.number else ret -= x.number;
     }
-    return common.newNumberValue(ret);
+    return C.newNumberValue(ret);
 }
 
 // built-in func
@@ -177,21 +177,21 @@ fn mul(xs: []ValueRef) anyerror!ValueRef {
     for (xs, 0..) |x, i| {
         if (i == 0) ret *= x.number;
     }
-    return common.newNumberValue(ret);
+    return C.newNumberValue(ret);
 }
 
 // built-in func
 fn quotient(xs: []ValueRef) anyerror!ValueRef {
     const a = xs[0].number;
     const b = xs[1].number;
-    return common.newNumberValue(@divFloor(a, b));
+    return C.newNumberValue(@divFloor(a, b));
 }
 
 // built-in func
 fn modulo(xs: []ValueRef) anyerror!ValueRef {
     const a = xs[0].number;
     const b = xs[1].number;
-    return common.newNumberValue(@mod(a, b));
+    return C.newNumberValue(@mod(a, b));
 }
 
 // built-in func
@@ -208,7 +208,7 @@ fn and_(xs: []ValueRef) anyerror!ValueRef {
 
 // built-in func
 fn eq(args: []ValueRef) anyerror!ValueRef {
-    if (common.deepEql(args[0], args[1])) return t();
+    if (C.deepEql(args[0], args[1])) return t();
     return f();
 }
 
@@ -223,7 +223,7 @@ fn le(args: []ValueRef) anyerror!ValueRef {
 
 // built-in func
 fn null_(x: []ValueRef) anyerror!ValueRef {
-    return toValue(x[0] == common.empty());
+    return toValue(x[0] == C.empty());
 }
 
 fn toBool(x: ValueRef) bool {
@@ -237,7 +237,7 @@ fn isF(x: ValueRef) bool {
 // built-in func
 fn print(xs: []ValueRef) !ValueRef {
     for (xs) |x| {
-        const str = try common.toString(x);
+        const str = try C.toString(x);
         const stdout = std.io.getStdOut().writer();
         nosuspend try stdout.print("#print: {s}\n", .{str});
     }
@@ -249,9 +249,9 @@ fn lambda(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
     const params = args[0];
     const body = args[1..];
     var val_params = try toSlice(params);
-    var sym_params = try alloc.alloc(Symbol.ID, val_params.len);
+    var sym_params = try alloc.alloc(S.ID, val_params.len);
     for (val_params, 0..) |a, i| sym_params[i] = a.symbol;
-    const func_val = try common.newFunctionValue(try common.newFunction(
+    const func_val = try C.newFunctionValue(try C.newFunction(
         null,
         sym_params,
         body,

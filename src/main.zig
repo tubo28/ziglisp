@@ -1,23 +1,20 @@
 const std = @import("std");
 
-const V = common.ValueRef;
-const Env = @import("env.zig").Env;
-const EnvRef = Env.Ref;
-
-const Symbol = @import("symbol.zig");
-
-const common = @import("common.zig");
-const toString = common.toString;
-const alloc = common.alloc;
-const Value = common.Value;
-
-const T = @import("tokenize.zig");
-const P = @import("parse.zig");
-const E = @import("evaluate.zig");
 const B = @import("builtin.zig");
+const C = @import("common.zig");
+const E = @import("evaluate.zig");
+const P = @import("parse.zig");
+const S = @import("symbol.zig");
+const T = @import("tokenize.zig");
+
+const Env = @import("env.zig").Env;
+const alloc = C.alloc;
+const EnvRef = Env.Ref;
+const toString = C.toString;
+const ValueRef = C.ValueRef;
 
 pub fn main() !void {
-    const args = try std.process.argsAlloc(common.alloc);
+    const args = try std.process.argsAlloc(C.alloc);
     if (args.len == 2) {
         try evalFile(args[1]);
         return;
@@ -66,10 +63,10 @@ fn readLine(reader: anytype) !?[]const u8 {
     return fbs.getWritten();
 }
 
-fn eval(code: []const u8, env: EnvRef) !struct { V, EnvRef } {
+fn eval(code: []const u8, env: EnvRef) !struct { ValueRef, EnvRef } {
     const tokens = try T.tokenize(code);
     const sexprs = try P.parse(tokens);
-    var ret = common.empty();
+    var ret = C.empty();
     var new_env = env;
     for (sexprs) |expr| ret, new_env = try E.evaluate(expr, new_env);
     // std.log.debug("eval result: {s}", .{tos(ret)});
@@ -77,7 +74,7 @@ fn eval(code: []const u8, env: EnvRef) !struct { V, EnvRef } {
 }
 
 fn loadBuiltin() !EnvRef {
-    try Symbol.init();
+    try S.init();
     var env = try B.loadBuiltin();
     const code = @embedFile("builtin.scm");
     const tokens = try T.tokenize(code);
@@ -86,7 +83,7 @@ fn loadBuiltin() !EnvRef {
     return env;
 }
 
-fn parse(code: []const u8) ![]V {
+fn parse(code: []const u8) ![]ValueRef {
     const tokens = try T.tokenize(code);
     const sexprs = try P.parse(tokens);
     // for (sexprs) |expr| {
@@ -101,7 +98,7 @@ test "tokenize" {
     const env = try loadBuiltin();
     const TestCase = struct {
         code: []const u8,
-        want: []V,
+        want: []ValueRef,
     };
 
     const cases = [_]TestCase{
@@ -243,7 +240,7 @@ test "tokenize" {
         const code = c.code;
         std.log.debug("test {}: {s}", .{ i, code });
         const get, _ = try eval(code, env);
-        try std.testing.expect(common.deepEql(get, c.want[c.want.len - 1]));
+        try std.testing.expect(C.deepEql(get, c.want[c.want.len - 1]));
         std.log.info("test result: ok", .{});
     }
 }

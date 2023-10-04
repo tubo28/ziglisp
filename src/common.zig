@@ -1,14 +1,12 @@
 const std = @import("std");
 
-pub const Token = @import("tokenize.zig").Token;
-pub const ValueRef = *const Value;
+const S = @import("symbol.zig");
 
-const Symbol = @import("symbol.zig");
-const SymbolID = Symbol.ID;
-
+const SymbolID = S.ID;
 const Env = @import("env.zig").Env;
 const EnvRef = Env.Ref;
 
+pub const ValueRef = *const Value;
 pub const EvalResult = struct { ValueRef, EnvRef };
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -113,7 +111,7 @@ fn emptyCons() *const Cons {
 pub fn f() ValueRef {
     if (f_opt) |ff| return ff;
     var f_ = alloc.create(Value) catch @panic("failed to alloc #f");
-    f_.* = Value{ .symbol = Symbol.getOrRegister("#f") catch unreachable };
+    f_.* = Value{ .symbol = S.getOrRegister("#f") catch unreachable };
     f_opt = f_;
     return f_opt.?;
 }
@@ -123,7 +121,7 @@ pub fn f() ValueRef {
 pub fn t() ValueRef {
     if (t_opt) |tt| return tt;
     var t_ = alloc.create(Value) catch @panic("failed to alloc #t");
-    t_.* = Value{ .symbol = Symbol.getOrRegister("#t") catch @panic("symbol #t not registered") };
+    t_.* = Value{ .symbol = S.getOrRegister("#t") catch @panic("symbol #t not registered") };
     t_opt = t_;
     return t_opt.?;
 }
@@ -213,11 +211,11 @@ fn toStringInner(cell: ValueRef, builder: *std.ArrayList(u8)) anyerror!void {
             ) catch @panic("too large integer");
             try builder.appendSlice(str);
         },
-        Value.symbol => |sym| try builder.appendSlice(Symbol.getName(sym).?),
+        Value.symbol => |sym| try builder.appendSlice(S.getName(sym).?),
         Value.function => |func| {
             if (func.name) |n| {
                 try builder.appendSlice("<function:");
-                try builder.appendSlice(Symbol.getName(n).?);
+                try builder.appendSlice(S.getName(n).?);
                 try builder.appendSlice(">");
             } else {
                 try builder.appendSlice("<lambda>");
@@ -246,13 +244,13 @@ fn consToString(x: *const Cons, builder: *std.ArrayList(u8)) !void {
     }
 }
 
-pub fn panicAt(tok: Token, message: []const u8) void {
-    const stderr = std.io.getStdErr().writer();
-    nosuspend {
-        stderr.print("error: {s}\n", .{message});
-        stderr.print("error: {s}\n", .{message});
-        for (0..tok.index + 7) |_| stderr.print(" ", .{});
-        stderr.print("^\n");
-    }
-    unreachable;
-}
+// pub fn panicAt(tok: T, message: []const u8) void {
+//     const stderr = std.io.getStdErr().writer();
+//     nosuspend {
+//         stderr.print("error: {s}\n", .{message});
+//         stderr.print("error: {s}\n", .{message});
+//         for (0..tok.index + 7) |_| stderr.print(" ", .{});
+//         stderr.print("^\n");
+//     }
+//     unreachable;
+// }

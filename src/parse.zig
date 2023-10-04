@@ -1,18 +1,17 @@
 const std = @import("std");
 const assert = std.debug.assert;
 
-const Token = @import("tokenize.zig").Token;
+const T = @import("tokenize.zig").Token;
+const S = @import("symbol.zig");
+const C = @import("common.zig");
+
 const TokenKind = @import("tokenize.zig").TokenKind;
-
-const Symbol = @import("symbol.zig");
-
-const common = @import("common.zig");
-const Value = common.Value;
-const ValueRef = common.ValueRef;
+const Value = C.Value;
+const ValueRef = C.ValueRef;
 
 // parse returns list of s-expr.
-pub fn parse(tokens: []const Token) ![]ValueRef {
-    var ret = std.ArrayList(ValueRef).init(common.alloc);
+pub fn parse(tokens: []const T) ![]ValueRef {
+    var ret = std.ArrayList(ValueRef).init(C.alloc);
     var rest = tokens;
     while (rest.len != 0) {
         const value, rest = try parseSExpr(rest);
@@ -25,7 +24,7 @@ pub fn parse(tokens: []const Token) ![]ValueRef {
 /// <sexpr>  ::= <atom>
 ///            | '(' <sexpr>* ')'
 ///            | <quote> <sexpr>
-fn parseSExpr(tokens: []const Token) anyerror!struct { ValueRef, []const Token } {
+fn parseSExpr(tokens: []const T) anyerror!struct { ValueRef, []const T } {
     if (tokens.len == 0)
         @panic("no tokens");
 
@@ -41,39 +40,39 @@ fn parseSExpr(tokens: []const Token) anyerror!struct { ValueRef, []const Token }
         TokenKind.quote => {
             // <quote> <sexpr> => (quote <sexpr>)
             const value, const rest = try parseSExpr(tail);
-            const quote = try common.newSymbolValue(try Symbol.getOrRegister("quote"));
+            const quote = try C.newSymbolValue(try S.getOrRegister("quote"));
             return .{
-                try common.newConsValue(quote, try common.newConsValue(value, common.empty())),
+                try C.newConsValue(quote, try C.newConsValue(value, C.empty())),
                 rest,
             };
         },
         TokenKind.int => |int| {
-            const atom = try common.newNumberValue(int);
+            const atom = try C.newNumberValue(int);
             return .{ atom, tokens[1..] };
         },
         TokenKind.symbol => |symbol| {
-            const atom = try common.newSymbolValue(symbol);
+            const atom = try C.newSymbolValue(symbol);
             return .{ atom, tokens[1..] };
         },
         TokenKind.right => @panic("unbalanced parens"),
-        TokenKind.f => return .{ common.f(), tokens[1..] },
+        TokenKind.f => return .{ C.f(), tokens[1..] },
     }
 }
 
 // Parse sequence of s-expression based on BFN below.
 // <S-expr>*
-fn parseList(tokens: []const Token) anyerror!struct { ValueRef, []const Token } {
-    if (tokens.len == 0) return .{ common.empty(), tokens };
+fn parseList(tokens: []const T) anyerror!struct { ValueRef, []const T } {
+    if (tokens.len == 0) return .{ C.empty(), tokens };
 
     switch (tokens[0].kind) {
-        TokenKind.right => return .{ common.empty(), tokens },
+        TokenKind.right => return .{ C.empty(), tokens },
         else => {
             // Parse first S-expr
             const car, var rest = try parseSExpr(tokens);
             // Parse following S-exprs
             const cdr, rest = try parseList(rest);
             // Meld the results of them
-            const ret = try common.newConsValue(car, cdr);
+            const ret = try C.newConsValue(car, cdr);
             return .{ ret, rest };
         },
     }

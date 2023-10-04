@@ -1,5 +1,6 @@
 const std = @import("std");
-const common = @import("common.zig");
+
+const C = @import("common.zig");
 
 pub const ID = usize;
 
@@ -9,8 +10,8 @@ var to_str: std.AutoHashMap(ID, []const u8) = undefined;
 
 pub fn init() !void {
     sid = 1;
-    to_id = std.StringHashMap(ID).init(common.alloc);
-    to_str = std.AutoHashMap(ID, []const u8).init(common.alloc);
+    to_id = std.StringHashMap(ID).init(C.alloc);
+    to_str = std.AutoHashMap(ID, []const u8).init(C.alloc);
 }
 
 // Find the symbol ID or register if new.

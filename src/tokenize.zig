@@ -1,8 +1,9 @@
 const std = @import("std");
-const common = @import("common.zig");
-const alloc = common.alloc;
 
-const Symbol = @import("symbol.zig");
+const C = @import("common.zig");
+const S = @import("symbol.zig");
+
+const alloc = C.alloc;
 
 pub const Token = struct {
     line: []const u8,
@@ -12,7 +13,7 @@ pub const Token = struct {
 
 pub const TokenKind = union(enum) {
     int: i64,
-    symbol: Symbol.ID,
+    symbol: S.ID,
     left, // (
     right, // )
     quote, // '
@@ -74,7 +75,7 @@ pub fn tokenize(code: []const u8) ![]const Token {
             } else if (std.mem.eql(u8, tok, "#f")) {
                 try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind.f });
             } else {
-                try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind{ .symbol = try Symbol.getOrRegister(tok) } });
+                try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind{ .symbol = try S.getOrRegister(tok) } });
             }
             continue;
         }

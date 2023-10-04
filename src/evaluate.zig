@@ -1,19 +1,16 @@
 const std = @import("std");
-const common = @import("common.zig");
 
-const alloc = common.alloc;
+const C = @import("common.zig");
+const S = @import("symbol.zig");
+
+const alloc = C.alloc;
 const Env = @import("env.zig").Env;
 const EnvRef = Env.Ref;
-const EvalResult = common.EvalResult;
-const f = common.f;
-const Function = common.Function;
-const t = common.t;
-const toString = common.toString;
-const Value = common.Value;
-const ValueRef = common.ValueRef;
-
-const Symbol = @import("symbol.zig");
-const SymbolID = Symbol.ID;
+const EvalResult = C.EvalResult;
+const Function = C.Function;
+const SymbolID = S.ID;
+const Value = C.Value;
+const ValueRef = C.ValueRef;
 
 const Token = @import("tokenize.zig").Token;
 
@@ -25,13 +22,13 @@ pub fn evaluate(x: ValueRef, env: EnvRef) anyerror!EvalResult {
         Value.function, Value.b_func, Value.b_spf => unreachable,
         Value.symbol => |sym| return if (env.get(sym)) |ent| .{ ent, env } else .{ x, env },
         Value.cons => |cons| {
-            if (x == common.empty()) {
+            if (x == C.empty()) {
                 std.log.err("cannot evaluate empty list", .{});
                 unreachable;
             }
             // Call something
             const c = try toCallable(cons.car, env);
-            const args = try common.toSlice(cons.cdr);
+            const args = try C.toSlice(cons.cdr);
             return call(c, args, env);
         },
     }
@@ -43,7 +40,7 @@ const Callable = union(enum) {
     func: *const Function,
 };
 
-fn toCallable(car: *const common.Value, env: EnvRef) !Callable {
+fn toCallable(car: *const C.Value, env: EnvRef) !Callable {
     switch (car.*) {
         Value.cons => {
             // example: ((lambda (x) (+ x x)) 1)
@@ -53,7 +50,7 @@ fn toCallable(car: *const common.Value, env: EnvRef) !Callable {
         Value.symbol => |sym| {
             const func = env.get(sym);
             if (func == null) {
-                std.log.err("symbol `{s}` is not callable", .{Symbol.getName(sym).?});
+                std.log.err("symbol `{s}` is not callable", .{S.getName(sym).?});
                 unreachable;
             }
             switch (func.?.*) {
@@ -61,7 +58,7 @@ fn toCallable(car: *const common.Value, env: EnvRef) !Callable {
                 Value.b_func => |bf| return Callable{ .bfunc = Builtin.func[bf] },
                 Value.b_spf => |bs| return Callable{ .bsf = Builtin.spf[bs] },
                 else => |other| {
-                    std.log.err("symbol `{s}` is bound to non-callable value: {any}", .{ Symbol.getName(sym).?, other });
+                    std.log.err("symbol `{s}` is bound to non-callable value: {any}", .{ S.getName(sym).?, other });
                     unreachable;
                 },
             }
@@ -89,7 +86,7 @@ fn call(callable: Callable, args: []ValueRef, env: EnvRef) anyerror!EvalResult {
 
 fn callFunction(func: *const Function, args: []ValueRef) anyerror!ValueRef {
     if (func.params.len != args.len) {
-        const name = if (func.name) |n| Symbol.getName(n).? else "<lambda>";
+        const name = if (func.name) |n| S.getName(n).? else "<lambda>";
         std.log.err("wrong number of argument for {s}", .{name});
         unreachable;
     }
@@ -102,7 +99,7 @@ fn callFunction(func: *const Function, args: []ValueRef) anyerror!ValueRef {
     for (func.params, args) |param, arg|
         try new_binds.append(.{ param, arg });
     if (func.name) |name|
-        try new_binds.append(.{ name, try common.newFunctionValue(func) });
+        try new_binds.append(.{ name, try C.newFunctionValue(func) });
 
     var func_env = try func.env.overwrite(try new_binds.toOwnedSlice());
 
