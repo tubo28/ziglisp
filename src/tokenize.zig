@@ -80,5 +80,5 @@ pub fn tokenize(code: []const u8) ![]const Token {
         }
         unreachable;
     }
-    return toks.items;
+    return toks.toOwnedSlice();
 }

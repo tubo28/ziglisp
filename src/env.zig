@@ -34,9 +34,9 @@ pub const Env = struct {
         return ret;
     }
 
-    pub fn overwrite(self: *const Self, ks: []SymbolID, vs: []ValueRef) !Env.Ref {
+    pub fn overwrite(self: *const Self, kvs: []struct { SymbolID, ValueRef }) !Env.Ref {
         var m = try newMap();
-        for (ks, vs) |k, v| try m.put(k, v);
+        for (kvs) |kv| try m.put(kv[0], kv[1]);
         var ret = try Common.alloc.create(Self);
         ret.* = Env{ .map = m, .parent = self };
         return ret;

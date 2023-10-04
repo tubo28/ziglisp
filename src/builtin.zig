@@ -31,23 +31,16 @@ pub fn loadBuiltin() !EnvRef {
         try Symbol.registerUnsafe(name, sid);
 
     // Bind symbol and function
-    std.debug.assert(func.len + spf.len < 100);
-    var sids: [100]Symbol.ID = undefined;
-    var vals: [100]ValueRef = undefined;
-    var l: usize = 0;
-    for (100_000_000.., 0..func.len) |sid, i| {
-        sids[l] = sid;
-        vals[l] = try common.newBFunctionValue(i);
-        l += 1;
-    }
-    for (200_000_000.., 0..spf.len) |sid, i| {
-        sids[l] = sid;
-        vals[l] = try common.newBSpecialForm(i);
-        l += 1;
-    }
+    var new_binds = std.ArrayList(struct { Symbol.ID, ValueRef }).init(alloc);
+    defer new_binds.deinit();
+
+    for (100_000_000.., 0..func.len) |sid, i|
+        try new_binds.append(.{ sid, try common.newBFunctionValue(i) });
+    for (200_000_000.., 0..spf.len) |sid, i|
+        try new_binds.append(.{ sid, try common.newBSpecialForm(i) });
 
     const ret = try Env.new();
-    return ret.overwrite(sids[0..l], vals[0..l]);
+    return ret.overwrite(try new_binds.toOwnedSlice());
 }
 
 // special form
@@ -55,24 +48,20 @@ fn let(args: []ValueRef, env: *const Env) anyerror!EvalResult {
     const pairs = args[0];
     const expr = args[1];
     const pairsSlice = try toSlice(pairs);
-    const n = pairsSlice.len;
 
-    var keys: []Symbol.ID = try alloc.alloc(Symbol.ID, n);
-    defer alloc.free(keys);
-    var vals: []ValueRef = try alloc.alloc(ValueRef, n);
-    defer alloc.free(vals);
+    var new_binds = std.ArrayList(struct { Symbol.ID, ValueRef }).init(alloc);
+    defer new_binds.deinit();
 
-    for (pairsSlice, 0..) |p, i| {
+    for (pairsSlice) |p| {
         const keyVal = try toSlice(p);
-        keys[i] = keyVal[0].symbol;
-        vals[i] = keyVal[1];
+        const k = keyVal[0].symbol;
+        const v = keyVal[1];
+        // No dependency between new values.
+        const ev, _ = try Evaluate.evaluate(v, env);
+        try new_binds.append(.{ k, ev });
     }
 
-    // No dependency between new values.
-    for (0..vals.len) |i|
-        vals[i], _ = try Evaluate.evaluate(vals[i], env);
-
-    const new_env = try env.overwrite(keys, vals);
+    const new_env = try env.overwrite(try new_binds.toOwnedSlice());
     return Evaluate.evaluate(expr, new_env);
 }
 
@@ -87,7 +76,7 @@ fn quote(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
 }
 
 // special form
-// (define (head args) body ...+)
+// (define (name args) body ...+)
 // The scope is lexical, i.e., the returning 'env' value is a snapshot of the parser's env.
 fn defineFunction(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
     const params = args[0];
@@ -96,16 +85,16 @@ fn defineFunction(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
     const slice = try toSlice(params);
     const name = slice[0];
 
-    var sym_params = std.ArrayList(Symbol.ID).init(alloc);
-    for (slice[1..]) |arg| try sym_params.append(arg.symbol);
-    const sym_name = name.symbol;
+    var sym_params = try alloc.alloc(Symbol.ID, slice.len - 1);
+    for (slice[1..], 0..) |arg, i| sym_params[i] = arg.symbol;
+
     const func_val = try common.newFunctionValue(try common.newFunction(
-        sym_name,
-        try sym_params.toOwnedSlice(),
+        name.symbol,
+        sym_params,
         body,
         env,
     ));
-    return .{ func_val, try env.overwriteOne(sym_name, func_val) };
+    return .{ func_val, try env.overwriteOne(name.symbol, func_val) };
 }
 
 // special form
@@ -259,14 +248,12 @@ fn print(xs: []ValueRef) !ValueRef {
 fn lambda(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
     const params = args[0];
     const body = args[1..];
-    var sym_params = std.ArrayList(Symbol.ID).init(alloc);
-    {
-        var tmp = try toSlice(params);
-        for (tmp) |a| try sym_params.append(a.symbol);
-    }
+    var val_params = try toSlice(params);
+    var sym_params = try alloc.alloc(Symbol.ID, val_params.len);
+    for (val_params, 0..) |a, i| sym_params[i] = a.symbol;
     const func_val = try common.newFunctionValue(try common.newFunction(
         null,
-        try sym_params.toOwnedSlice(),
+        sym_params,
         body,
         env,
     ));

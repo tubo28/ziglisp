@@ -87,9 +87,6 @@ fn call(callable: Callable, args: []ValueRef, env: EnvRef) anyerror!EvalResult {
     }
 }
 
-var args_and_self_sid: [128]SymbolID = undefined;
-var args_and_self: [128]ValueRef = undefined;
-
 fn callFunction(func: *const Function, args: []ValueRef) anyerror!ValueRef {
     if (func.params.len != args.len) {
         const name = if (func.name) |n| Symbol.getName(n).? else "<lambda>";
@@ -97,20 +94,17 @@ fn callFunction(func: *const Function, args: []ValueRef) anyerror!ValueRef {
         unreachable;
     }
 
+    var new_binds = std.ArrayList(struct { SymbolID, ValueRef }).init(alloc);
+    defer new_binds.deinit();
+
     // Evaluate arguments.
     // Names and the function and arguments overrite function's namespace, what we call shadowing.
-    for (func.params, args, 0..) |param, arg, i| {
-        args_and_self_sid[i] = param;
-        args_and_self[i] = arg;
-    }
-    var len = func.params.len;
-    if (func.name) |name| {
-        args_and_self_sid[len] = name;
-        args_and_self[len] = try common.newFunctionValue(func);
-        len += 1;
-    }
+    for (func.params, args) |param, arg|
+        try new_binds.append(.{ param, arg });
+    if (func.name) |name|
+        try new_binds.append(.{ name, try common.newFunctionValue(func) });
 
-    var func_env = try func.env.overwrite(args_and_self_sid[0..len], args_and_self[0..len]);
+    var func_env = try func.env.overwrite(try new_binds.toOwnedSlice());
 
     // Eval body.
     std.debug.assert(func.body.len != 0);
