@@ -1,7 +1,7 @@
 const std = @import("std");
 const common = @import("common.zig");
 
-pub const ID = u32;
+pub const ID = usize;
 
 var sid: ID = undefined;
 var to_id: std.StringHashMap(ID) = undefined;

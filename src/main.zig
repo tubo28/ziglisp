@@ -1,7 +1,8 @@
 const std = @import("std");
 
 const V = common.ValueRef;
-const Map = common.Map;
+const Env = @import("env.zig").Env;
+const EnvRef = Env.Ref;
 
 const Symbol = @import("symbol.zig");
 
@@ -65,17 +66,17 @@ fn readLine(reader: anytype) !?[]const u8 {
     return fbs.getWritten();
 }
 
-fn eval(code: []const u8, env: Map) !struct { V, Map } {
+fn eval(code: []const u8, env: EnvRef) !struct { V, EnvRef } {
     const tokens = try T.tokenize(code);
     const sexprs = try P.parse(tokens);
     var ret = common.empty();
-    var new_env = try env.clone();
+    var new_env = env;
     for (sexprs) |expr| ret, new_env = try E.evaluate(expr, new_env);
     // std.log.debug("eval result: {s}", .{tos(ret)});
     return .{ ret, new_env };
 }
 
-fn loadBuiltin() !Map {
+fn loadBuiltin() !EnvRef {
     try Symbol.init();
     var env = try B.loadBuiltin();
     const code = @embedFile("builtin.scm");

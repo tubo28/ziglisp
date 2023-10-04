@@ -6,14 +6,16 @@ const Evaluate = @import("evaluate.zig");
 const alloc = common.alloc;
 const EvalResult = common.EvalResult;
 const f = common.f;
-const Map = common.Map;
 const t = common.t;
 const toSlice = common.toSlice;
 const Value = common.Value;
 const ValueRef = common.ValueRef;
 
+const Env = @import("env.zig").Env;
+const EnvRef = Env.Ref;
+
 pub const Function = fn ([]ValueRef) anyerror!ValueRef;
-pub const SpecialForm = fn ([]ValueRef, Map) anyerror!EvalResult;
+pub const SpecialForm = fn ([]ValueRef, EnvRef) anyerror!EvalResult;
 
 const func_names = [_][]const u8{ "car", "cdr", "cons", "list", "print", "+", "-", "*", "=", "<", "or", "and", "null?", "quotient", "modulo" };
 pub const func = [_]*const Function{ car, cdr, cons_, list, print, add, sub, mul, eq, le, or_, and_, null_, quotient, modulo };
@@ -21,24 +23,35 @@ pub const func = [_]*const Function{ car, cdr, cons_, list, print, add, sub, mul
 const spf_names = [_][]const u8{ "quote", "begin", "define", "lambda", "if", "cond", "let" };
 pub const spf = [_]*const SpecialForm{ quote, begin, defineFunction, lambda, if_, cond, let };
 
-pub fn loadBuiltin() !Map {
-    var ret = Map.init(alloc);
-    for (func_names, 0..) |name, index| {
-        const sid = @as(u32, @intCast(index)) + 100_000_000;
+pub fn loadBuiltin() !EnvRef {
+    // Bind symbol and symbol id
+    for (func_names, 100_000_000..) |name, sid|
         try Symbol.registerUnsafe(name, sid);
-        try ret.put(sid, try common.newBFunctionValue(index));
+    for (spf_names, 200_000_000..) |name, sid|
+        try Symbol.registerUnsafe(name, sid);
+
+    // Bind symbol and function
+    std.debug.assert(func.len + spf.len < 100);
+    var sids: [100]Symbol.ID = undefined;
+    var vals: [100]ValueRef = undefined;
+    var l: usize = 0;
+    for (100_000_000.., 0..func.len) |sid, i| {
+        sids[l] = sid;
+        vals[l] = try common.newBFunctionValue(i);
+        l += 1;
+    }
+    for (200_000_000.., 0..spf.len) |sid, i| {
+        sids[l] = sid;
+        vals[l] = try common.newBSpecialForm(i);
+        l += 1;
     }
 
-    for (spf_names, 0..) |name, index| {
-        const sid = @as(u32, @intCast(index)) + 200_000_000;
-        try Symbol.registerUnsafe(name, sid);
-        try ret.put(sid, try common.newBSpecialForm(index));
-    }
-    return ret;
+    const ret = try Env.new();
+    return ret.overwrite(sids[0..l], vals[0..l]);
 }
 
 // special form
-fn let(args: []ValueRef, env: Map) anyerror!EvalResult {
+fn let(args: []ValueRef, env: *const Env) anyerror!EvalResult {
     const pairs = args[0];
     const expr = args[1];
     const pairsSlice = try toSlice(pairs);
@@ -55,12 +68,11 @@ fn let(args: []ValueRef, env: Map) anyerror!EvalResult {
         vals[i] = keyVal[1];
     }
 
-    // The prior binding is not used to evaluate the following binding,
-    // but the result of evaluating the RHS of a prior ones are propagated.
-    var new_env = try env.clone();
+    // No dependency between new values.
     for (0..vals.len) |i|
-        vals[i], new_env = try Evaluate.evaluate(vals[i], new_env);
-    for (keys, vals) |k, v| new_env = try putPure(new_env, k, v);
+        vals[i], _ = try Evaluate.evaluate(vals[i], env);
+
+    const new_env = try env.overwrite(keys, vals);
     return Evaluate.evaluate(expr, new_env);
 }
 
@@ -70,14 +82,14 @@ fn defineValue() anyerror!ValueRef {
 }
 
 // special form
-fn quote(args: []ValueRef, env: Map) anyerror!EvalResult {
+fn quote(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
     return .{ args[0], env };
 }
 
 // special form
 // (define (head args) body ...+)
 // The scope is lexical, i.e., the returning 'env' value is a snapshot of the parser's env.
-fn defineFunction(args: []ValueRef, env: Map) anyerror!EvalResult {
+fn defineFunction(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
     const params = args[0];
     const body = args[1..];
     std.debug.assert(body.len != 0); // Ill-formed special form
@@ -93,11 +105,11 @@ fn defineFunction(args: []ValueRef, env: Map) anyerror!EvalResult {
         body,
         env,
     ));
-    return .{ func_val, try putPure(env, sym_name, func_val) };
+    return .{ func_val, try env.overwriteOne(sym_name, func_val) };
 }
 
 // special form
-fn if_(args: []ValueRef, env: Map) anyerror!EvalResult {
+fn if_(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
     const pred = args[0];
     const then = args[1];
     const unless = if (args.len >= 3) args[2] else null;
@@ -108,8 +120,8 @@ fn if_(args: []ValueRef, env: Map) anyerror!EvalResult {
 }
 
 // special form
-fn cond(clauses: []ValueRef, env: Map) anyerror!EvalResult {
-    var e = try env.clone();
+fn cond(clauses: []ValueRef, env: EnvRef) anyerror!EvalResult {
+    var e = env;
     for (clauses) |c| {
         const tmp = try toSlice(c);
         const pred = tmp[0];
@@ -121,9 +133,9 @@ fn cond(clauses: []ValueRef, env: Map) anyerror!EvalResult {
 }
 
 // special form
-fn begin(args: []ValueRef, env: Map) anyerror!EvalResult {
+fn begin(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
     var ret = common.empty();
-    var new_env = try env.clone();
+    var new_env = env;
     for (args) |p| ret, new_env = try Evaluate.evaluate(p, new_env);
     return .{ ret, new_env }; // return the last result
 }
@@ -244,7 +256,7 @@ fn print(xs: []ValueRef) !ValueRef {
 }
 
 // special form
-fn lambda(args: []ValueRef, env: Map) anyerror!EvalResult {
+fn lambda(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
     const params = args[0];
     const body = args[1..];
     var sym_params = std.ArrayList(Symbol.ID).init(alloc);
@@ -259,10 +271,4 @@ fn lambda(args: []ValueRef, env: Map) anyerror!EvalResult {
         env,
     ));
     return .{ func_val, env };
-}
-
-fn putPure(env: Map, key: Symbol.ID, val: ValueRef) !Map {
-    var ret = try env.clone();
-    try ret.put(key, val);
-    return ret;
 }

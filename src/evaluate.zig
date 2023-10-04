@@ -2,10 +2,11 @@ const std = @import("std");
 const common = @import("common.zig");
 
 const alloc = common.alloc;
+const Env = @import("env.zig").Env;
+const EnvRef = Env.Ref;
 const EvalResult = common.EvalResult;
 const f = common.f;
 const Function = common.Function;
-const Map = common.Map;
 const t = common.t;
 const toString = common.toString;
 const Value = common.Value;
@@ -18,7 +19,7 @@ const Token = @import("tokenize.zig").Token;
 
 const Builtin = @import("builtin.zig");
 
-pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
+pub fn evaluate(x: ValueRef, env: EnvRef) anyerror!EvalResult {
     switch (x.*) {
         Value.number => return .{ x, env },
         Value.function, Value.b_func, Value.b_spf => unreachable,
@@ -62,7 +63,7 @@ pub fn evaluate(x: ValueRef, env: Map) anyerror!EvalResult {
     }
 }
 
-fn call(val: anytype, args: ValueRef, env: Map) anyerror!EvalResult {
+fn call(val: anytype, args: ValueRef, env: EnvRef) anyerror!EvalResult {
     const ty = @TypeOf(val);
     switch (ty) {
         *const Builtin.SpecialForm => return val(try common.toSlice(args), env),
@@ -82,6 +83,9 @@ fn call(val: anytype, args: ValueRef, env: Map) anyerror!EvalResult {
     }
 }
 
+var args_and_self_sid: [128]SymbolID = undefined;
+var args_and_self: [128]ValueRef = undefined;
+
 fn callFunction(func: *const Function, args: []ValueRef) anyerror!ValueRef {
     //    const func = x.function;
     if (func.params.len != args.len) {
@@ -90,26 +94,32 @@ fn callFunction(func: *const Function, args: []ValueRef) anyerror!ValueRef {
         @panic("wrong number of arguments for function");
     }
 
-    var new_env = try func.env.clone();
     // Evaluate arguments.
-    // Overwrite env entries if exist.
-    // It means argument name shadows the values with same name at the defined time.
-    // For function name
-    if (func.name) |name| try new_env.put(name, try common.newFunctionValue(func));
-    // For arguments
-    for (func.params, args) |param, arg|
-        try new_env.put(param, arg);
+    // Names and the function and arguments overrite function's namespace, what we call 'shadowing'.
+
+    for (func.params, args, 0..) |param, arg, i| {
+        args_and_self_sid[i] = param;
+        args_and_self[i] = arg;
+    }
+    var len = func.params.len;
+    if (func.name) |name| {
+        args_and_self_sid[len] = name;
+        args_and_self[len] = try common.newFunctionValue(func);
+        len += 1;
+    }
+
+    var func_env = try func.env.overwrite(args_and_self_sid[0..len], args_and_self[0..len]);
 
     // Eval body.
     std.debug.assert(func.body.len != 0);
     var ret: ValueRef = undefined;
-    for (func.body) |expr| ret, new_env = try evaluate(expr, new_env);
+    for (func.body) |expr| ret, func_env = try evaluate(expr, func_env);
     return ret;
 }
 
-fn toSliceE(head: ValueRef, env: Map) !struct { []ValueRef, Map } {
+fn toSliceE(head: ValueRef, env: EnvRef) !struct { []ValueRef, EnvRef } {
     var ret = try common.toSlice(head);
-    var e = try env.clone();
-    for (ret) |*x| x.*, e = try evaluate(x.*, env);
+    var e = env;
+    for (ret) |*x| x.*, e = try evaluate(x.*, e);
     return .{ ret, e };
 }

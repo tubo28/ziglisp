@@ -6,8 +6,10 @@ pub const ValueRef = *const Value;
 const Symbol = @import("symbol.zig");
 const SymbolID = Symbol.ID;
 
-pub const Map = std.AutoHashMap(SymbolID, ValueRef); // TODO: Dependency for env
-pub const EvalResult = struct { ValueRef, Map };
+const Env = @import("env.zig").Env;
+const EnvRef = Env.Ref;
+
+pub const EvalResult = struct { ValueRef, EnvRef };
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 pub const alloc = gpa.allocator();
@@ -68,7 +70,7 @@ pub const Function = struct {
     name: ?SymbolID, // null for lambda
     params: []SymbolID,
     body: []ValueRef,
-    env: Map, // captured env (lexical scope)
+    env: EnvRef, // captured env (lexical scope)
 };
 
 pub fn newFunctionValue(func: *const Function) !ValueRef {
@@ -77,7 +79,7 @@ pub fn newFunctionValue(func: *const Function) !ValueRef {
     return ret;
 }
 
-pub fn newFunction(name: ?SymbolID, params: []SymbolID, body: []ValueRef, env: Map) !*Function {
+pub fn newFunction(name: ?SymbolID, params: []SymbolID, body: []ValueRef, env: EnvRef) !*Function {
     var ret: *Function = try alloc.create(Function);
     ret.* = Function{
         .name = name,
