@@ -19,3 +19,4 @@ zig-out/
 
 main
 main.o
+callgrind.*

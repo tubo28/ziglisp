@@ -98,7 +98,7 @@ fn callFunction(func: *const Function, args: ValueRef) anyerror!ValueRef {
             h = h.cons.cdr;
         }
     }
-    std.debug.assert(i != func.params.len);
+    std.debug.assert(i == func.params.len);
     if (func.name) |name| {
         const t = try C.new(Value, Value{ .function = func });
         new_binds[i] = .{ name, t };
