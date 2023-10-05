@@ -28,8 +28,7 @@ pub fn evaluate(x: ValueRef, env: EnvRef) anyerror!EvalResult {
             }
             // Call something
             const c = try toCallable(cons.car, env);
-            const args = try C.toSlice(cons.cdr);
-            return call(c, args, env);
+            return call(c, cons.cdr, env);
         },
     }
 }
@@ -70,7 +69,7 @@ fn toCallable(car: *const C.Value, env: EnvRef) !Callable {
     }
 }
 
-fn call(callable: Callable, args: []ValueRef, env: EnvRef) anyerror!EvalResult {
+fn call(callable: Callable, args: ValueRef, env: EnvRef) anyerror!EvalResult {
     switch (callable) {
         Callable.bsf => |form| return form(args, env),
         Callable.bfunc => |func| {
@@ -84,37 +83,61 @@ fn call(callable: Callable, args: []ValueRef, env: EnvRef) anyerror!EvalResult {
     }
 }
 
-fn callFunction(func: *const Function, args: []ValueRef) anyerror!ValueRef {
-    if (func.params.len != args.len) {
-        const name = if (func.name) |n| S.getName(n).? else "<lambda>";
-        std.log.err("wrong number of argument for {s}", .{name});
-        unreachable;
-    }
-
-    var new_binds = std.ArrayList(struct { SymbolID, ValueRef }).init(alloc);
-    defer new_binds.deinit();
+fn callFunction(func: *const Function, args: ValueRef) anyerror!ValueRef {
+    var new_binds: [100]struct { SymbolID, ValueRef } = undefined;
+    var i: usize = 0;
 
     // Evaluate arguments.
     // Names and the function and arguments overrite function's namespace, what we call shadowing.
-    for (func.params, args) |param, arg|
-        try new_binds.append(.{ param, arg });
+    {
+        var h = args;
+        while (h != C.empty()) {
+            const arg = h.cons.car;
+            new_binds[i] = .{ func.params[i], arg };
+            i += 1;
+            h = h.cons.cdr;
+        }
+    }
+    std.debug.assert(i != func.params.len);
     if (func.name) |name| {
         const t = try C.new(Value, Value{ .function = func });
-        try new_binds.append(.{ name, t });
+        new_binds[i] = .{ name, t };
+        i += 1;
     }
 
-    var func_env = try func.env.overwrite(try new_binds.toOwnedSlice());
+    var func_env = try func.env.overwrite(new_binds[0..i]);
 
     // Eval body.
-    std.debug.assert(func.body.len != 0);
+    std.debug.assert(func.body != C.empty());
     var ret: ValueRef = undefined;
-    for (func.body) |expr| ret, func_env = try evaluate(expr, func_env);
+    {
+        var h = func.body;
+        while (h != C.empty()) {
+            const expr = h.cons.car;
+            ret, func_env = try evaluate(expr, func_env);
+            h = h.cons.cdr;
+        }
+    }
     return ret;
 }
 
-fn evalAll(slice: []ValueRef, env: EnvRef) !struct { []ValueRef, EnvRef } {
-    var ret = try alloc.alloc(ValueRef, slice.len);
+fn evalAll(list: ValueRef, env: EnvRef) !struct { ValueRef, EnvRef } {
     var e = env;
-    for (ret, slice) |*x, y| x.*, e = try evaluate(y, e);
+
+    var h = list;
+    var slice: [100]ValueRef = undefined;
+    var i: usize = 0;
+    while (h != C.empty()) {
+        const x, e = try evaluate(h.cons.car, e);
+        slice[i] = x;
+        i += 1;
+        h = h.cons.cdr;
+    }
+    var ret = C.empty();
+    while (i != 0) {
+        i -= 1;
+        ret = try C.newCons(slice[i], ret);
+    }
+
     return .{ ret, e };
 }

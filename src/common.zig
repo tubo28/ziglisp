@@ -45,7 +45,7 @@ pub fn newCons(car: ValueRef, cdr: ValueRef) !ValueRef {
 pub const Function = struct {
     name: ?SymbolID, // null for lambda
     params: []SymbolID,
-    body: []ValueRef,
+    body: ValueRef, // cons list
     env: EnvRef, // captured env (lexical scope)
 };
 

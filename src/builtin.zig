@@ -16,8 +16,8 @@ const ValueRef = C.ValueRef;
 const Env = @import("env.zig").Env;
 const EnvRef = Env.Ref;
 
-pub const Function = fn ([]ValueRef) anyerror!ValueRef;
-pub const SpecialForm = fn ([]ValueRef, EnvRef) anyerror!EvalResult;
+pub const Function = fn (ValueRef) anyerror!ValueRef;
+pub const SpecialForm = fn (ValueRef, EnvRef) anyerror!EvalResult;
 
 const func_names = [_][]const u8{ "car", "cdr", "cons", "list", "print", "+", "-", "*", "=", "<", "or", "and", "null?", "quotient", "modulo" };
 pub const func = [_]*const Function{ car, cdr, cons_, list, print, add, sub, mul, eq, le, or_, and_, null_, quotient, modulo };
@@ -46,9 +46,9 @@ pub fn loadBuiltin() !EnvRef {
 }
 
 // special form
-fn let(args: []ValueRef, env: *const Env) anyerror!EvalResult {
-    const pairs = args[0];
-    const expr = args[1];
+fn let(args: ValueRef, env: *const Env) anyerror!EvalResult {
+    const pairs = _car(args);
+    const expr = _cadr(args);
     const pairsSlice = try toSlice(pairs);
 
     var new_binds = std.ArrayList(struct { S.ID, ValueRef }).init(alloc);
@@ -73,17 +73,17 @@ fn defineValue() anyerror!ValueRef {
 }
 
 // special form
-fn quote(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
-    return .{ args[0], env };
+fn quote(args: ValueRef, env: EnvRef) anyerror!EvalResult {
+    return .{ _car(args), env };
 }
 
 // special form
 // (define (name args) body ...+)
 // The scope is lexical, i.e., the returning 'env' value is a snapshot of the parser's env.
-fn defineFunction(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
-    const params = args[0];
-    const body = args[1..];
-    std.debug.assert(body.len != 0); // Ill-formed special form
+fn defineFunction(args: ValueRef, env: EnvRef) anyerror!EvalResult {
+    const params = _car(args);
+    const body = _cdr(args);
+    std.debug.assert(body != C.empty()); // Ill-formed special form
     const slice = try toSlice(params);
     const name = slice[0];
 
@@ -100,10 +100,10 @@ fn defineFunction(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
 }
 
 // special form
-fn if_(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
-    const pred = args[0];
-    const then = args[1];
-    const unless = if (args.len >= 3) args[2] else null;
+fn if_(args: ValueRef, env: EnvRef) anyerror!EvalResult {
+    const pred = _car(args);
+    const then = _cadr(args);
+    const unless = if (_caddr(args) != C.empty()) _caddr(args) else null;
     const p, const new_env = try E.evaluate(pred, env);
     if (toBool(p)) return try E.evaluate(then, new_env);
     if (unless) |u| return try E.evaluate(u, new_env);
@@ -111,108 +111,127 @@ fn if_(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
 }
 
 // special form
-fn cond(clauses: []ValueRef, env: EnvRef) anyerror!EvalResult {
+fn cond(clauses: ValueRef, env: EnvRef) anyerror!EvalResult {
     var e = env;
-    for (clauses) |c| {
-        const tmp = try toSlice(c);
-        const pred = tmp[0];
-        const then = tmp[1];
+    var h = clauses;
+    while (h != C.empty()) {
+        const cl = _car(h);
+        const pred = _car(cl);
         const p, e = try E.evaluate(pred, e);
-        if (toBool(p)) return E.evaluate(then, e);
+        if (toBool(p)) return E.evaluate(_cadr(cl), e);
+        h = _cdr(h);
     }
     return .{ C.empty(), e }; // Return empty if all pred is false.
 }
 
 // special form
-fn begin(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
+fn begin(args: ValueRef, env: EnvRef) anyerror!EvalResult {
     var ret = C.empty();
     var new_env = env;
-    for (args) |p| ret, new_env = try E.evaluate(p, new_env);
+
+    var h = args;
+    while (h != C.empty()) {
+        const x = _car(h);
+        ret, new_env = try E.evaluate(x, new_env);
+        h = _cdr(h);
+    }
     return .{ ret, new_env }; // return the last result
 }
 
 // built-in func
-fn car(args: []ValueRef) anyerror!ValueRef {
-    return args[0].cons.car;
+fn car(args: ValueRef) anyerror!ValueRef {
+    return _car(_car(args));
 }
 
 // built-in func
-fn cdr(args: []ValueRef) anyerror!ValueRef {
-    return args[0].cons.cdr;
+fn cdr(args: ValueRef) anyerror!ValueRef {
+    return _cdr(_car(args));
 }
 
 // built-in func
-fn cons_(args: []ValueRef) anyerror!ValueRef {
-    return C.newCons(args[0], args[1]);
+fn cons_(args: ValueRef) anyerror!ValueRef {
+    return C.newCons(_car(args), _cadr(args));
 }
 
 // built-in func
-fn list(xs: []ValueRef) anyerror!ValueRef {
-    var ret = C.empty();
-    var i = xs.len;
-    while (i > 0) {
-        i -= 1;
-        ret = try C.newCons(xs[i], ret);
-    }
-    return ret;
+fn list(xs: ValueRef) anyerror!ValueRef {
+    if (xs == C.empty()) return xs;
+    return C.newCons(_car(xs), try list(_cdr(xs)));
 }
 
 // built-in func
-fn add(xs: []ValueRef) anyerror!ValueRef {
+fn add(xs: ValueRef) anyerror!ValueRef {
     var ret: i64 = 0;
-    for (xs) |x| ret += x.number;
-    return C.new(Value, Value{ .number = ret });
-}
-
-// built-in func
-fn sub(xs: []ValueRef) anyerror!ValueRef {
-    var ret: i64 = 0;
-    for (xs, 0..) |x, i| {
-        if (i == 0) ret += x.number else ret -= x.number;
+    var h = xs;
+    while (h != C.empty()) {
+        const x = _car(h);
+        ret += x.number;
+        h = _cdr(h);
     }
     return C.new(Value, Value{ .number = ret });
 }
 
 // built-in func
-fn mul(xs: []ValueRef) anyerror!ValueRef {
+fn sub(xs: ValueRef) anyerror!ValueRef {
+    var ret: i64 = 0;
+    var h = xs;
+    while (h != C.empty()) {
+        const x = _car(h);
+        ret += if (h == xs) x.number else -x.number;
+        h = _cdr(h);
+    }
+    return C.new(Value, Value{ .number = ret });
+}
+
+// built-in func
+fn mul(xs: ValueRef) anyerror!ValueRef {
     var ret: i64 = 1;
-    for (xs, 0..) |x, i| {
-        if (i == 0) ret *= x.number;
+    var h = xs;
+    while (h != C.empty()) {
+        const x = _car(h);
+        ret *= x.number;
+        h = _cdr(h);
     }
     return C.new(Value, Value{ .number = ret });
 }
 
 // built-in func
-fn quotient(xs: []ValueRef) anyerror!ValueRef {
-    const a = xs[0].number;
-    const b = xs[1].number;
-    const ret = @divFloor(a, b);
+fn quotient(xs: ValueRef) anyerror!ValueRef {
+    const ret = @divFloor(_car(xs).number, _cadr(xs).number);
     return C.new(Value, Value{ .number = ret });
 }
 
 // built-in func
-fn modulo(xs: []ValueRef) anyerror!ValueRef {
-    const a = xs[0].number;
-    const b = xs[1].number;
-    const ret = @mod(a, b);
+fn modulo(xs: ValueRef) anyerror!ValueRef {
+    const ret = @mod(_car(xs).number, _cadr(xs).number);
     return C.new(Value, Value{ .number = ret });
 }
 
 // built-in func
-fn or_(xs: []ValueRef) anyerror!ValueRef {
-    for (xs) |x| if (toBool(x)) return t();
+fn or_(xs: ValueRef) anyerror!ValueRef {
+    var h = xs;
+    while (h != C.empty()) {
+        const x = _car(h);
+        if (toBool(x)) return t();
+        h = _cdr(h);
+    }
     return f();
 }
 
 // built-in func
-fn and_(xs: []ValueRef) anyerror!ValueRef {
-    for (xs) |x| if (!toBool(x)) return f();
+fn and_(xs: ValueRef) anyerror!ValueRef {
+    var h = xs;
+    while (h != C.empty()) {
+        const x = _car(h);
+        if (!toBool(x)) return f();
+        h = _cdr(h);
+    }
     return t();
 }
 
 // built-in func
-fn eq(args: []ValueRef) anyerror!ValueRef {
-    if (C.deepEql(args[0], args[1])) return t();
+fn eq(args: ValueRef) anyerror!ValueRef {
+    if (C.deepEql(_car(args), _cadr(args))) return t();
     return f();
 }
 
@@ -221,13 +240,13 @@ fn toValue(x: bool) anyerror!ValueRef {
 }
 
 // built-in func
-fn le(args: []ValueRef) anyerror!ValueRef {
-    return toValue(args[0].number < args[1].number);
+fn le(args: ValueRef) anyerror!ValueRef {
+    return toValue(_car(args).number < _cadr(args).number);
 }
 
 // built-in func
-fn null_(x: []ValueRef) anyerror!ValueRef {
-    return toValue(x[0] == C.empty());
+fn null_(x: ValueRef) anyerror!ValueRef {
+    return toValue(_car(x) == C.empty());
 }
 
 fn toBool(x: ValueRef) bool {
@@ -239,19 +258,25 @@ fn isF(x: ValueRef) bool {
 }
 
 // built-in func
-fn print(xs: []ValueRef) !ValueRef {
-    for (xs) |x| {
+fn print(xs: ValueRef) !ValueRef {
+    var h = xs;
+    var ret = C.empty();
+    while (h != C.empty()) {
+        const x = _car(h);
+        ret = x;
         const str = try C.toString(x);
         const stdout = std.io.getStdOut().writer();
         nosuspend try stdout.print("#print: {s}\n", .{str});
+        h = _cdr(h);
     }
-    return xs[xs.len - 1];
+    return ret;
 }
 
 // special form
-fn lambda(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
-    const params = args[0];
-    const body = args[1..];
+// (lambda (x y) (+ x y))
+fn lambda(args: ValueRef, env: EnvRef) anyerror!EvalResult {
+    const params = _car(args);
+    const body = _cdr(args);
     var val_params = try toSlice(params);
     var sym_params = try alloc.alloc(S.ID, val_params.len);
     for (val_params, 0..) |a, i| sym_params[i] = a.symbol;
@@ -264,4 +289,32 @@ fn lambda(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
         }),
     });
     return .{ func_val, env };
+}
+
+fn _car(x: ValueRef) ValueRef {
+    return x.cons.car;
+}
+
+fn _cdr(x: ValueRef) ValueRef {
+    return x.cons.cdr;
+}
+
+fn _cddr(x: ValueRef) ValueRef {
+    return _cdr(x).cons.cdr;
+}
+
+fn _cdddr(x: ValueRef) ValueRef {
+    return _cddr(x).cons.cdr;
+}
+
+fn _cadr(x: ValueRef) ValueRef {
+    return _cdr(x).cons.car;
+}
+
+fn _caddr(x: ValueRef) ValueRef {
+    return _cddr(x).cons.car;
+}
+
+fn _cadddr(x: ValueRef) ValueRef {
+    return _cdddr(x).cons.car;
 }
