@@ -23,9 +23,10 @@ pub fn new(ty: anytype, x: ty) !*ty {
     return ret;
 }
 
+const ValueTag = enum { number, symbol, cons, function, b_func, b_spf };
 /// Node of tree.
 /// It is a branch only if cons, otherwise leaf.
-pub const Value = union(enum) {
+pub const Value = union(ValueTag) {
     number: i64,
     symbol: SymbolID,
     cons: *const Cons,
@@ -112,35 +113,14 @@ fn atomp(cons: ValueRef) ?ValueRef {
 /// Equality of function values are only based on the names.
 pub fn deepEql(x: ValueRef, y: ValueRef) bool {
     if (x == empty() or y == empty()) return x == y;
+    if (@as(ValueTag, x.*) != @as(ValueTag, y.*)) return false;
     switch (x.*) {
-        Value.number => |x_| switch (y.*) {
-            Value.number => |y_| return x_ == y_,
-            else => return false,
-        },
-        Value.symbol => |x_| switch (y.*) {
-            Value.symbol => |y_| return x_ == y_,
-            else => return false,
-        },
-        Value.b_func => |x_| switch (y.*) {
-            Value.b_func => |y_| return x_ == y_,
-            else => return false,
-        },
-        Value.b_spf => |x_| switch (y.*) {
-            Value.b_spf => |y_| return x_ == y_,
-            else => return false,
-        },
-        Value.cons => |x_| switch (y.*) {
-            Value.cons => |y_| return deepEql(x_.car, y_.car) and deepEql(x_.cdr, y_.cdr),
-            else => return false,
-        },
-        Value.function => |x_| switch (y.*) {
-            Value.function => |y_| {
-                if (x_.name != null and y_.name != null) return x_.name.? == y_.name.?; // just comparing name
-                if (x_.name == null and y_.name == null) return true;
-                return false;
-            },
-            else => return false,
-        },
+        Value.number => |x_| return x_ == y.number,
+        Value.symbol => |x_| return x_ == y.symbol,
+        Value.b_func => |x_| return x_ == y.b_func,
+        Value.b_spf => |x_| return x_ == y.b_spf,
+        Value.cons => |x_| return deepEql(x_.car, y.cons.car) and deepEql(x_.cdr, y.cons.cdr),
+        Value.function => |x_| return x_.name == y.function.name, // just comparing name
     }
 }
 
