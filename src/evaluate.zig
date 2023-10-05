@@ -98,8 +98,10 @@ fn callFunction(func: *const Function, args: []ValueRef) anyerror!ValueRef {
     // Names and the function and arguments overrite function's namespace, what we call shadowing.
     for (func.params, args) |param, arg|
         try new_binds.append(.{ param, arg });
-    if (func.name) |name|
-        try new_binds.append(.{ name, try C.newFunctionValue(func) });
+    if (func.name) |name| {
+        const t = try C.new(Value, Value{ .function = func });
+        try new_binds.append(.{ name, t });
+    }
 
     var func_env = try func.env.overwrite(try new_binds.toOwnedSlice());
 

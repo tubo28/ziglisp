@@ -40,18 +40,18 @@ fn parseSExpr(tokens: []const T) anyerror!struct { ValueRef, []const T } {
         TokenKind.quote => {
             // <quote> <sexpr> => (quote <sexpr>)
             const value, const rest = try parseSExpr(tail);
-            const quote = try C.newSymbolValue(try S.getOrRegister("quote"));
+            const quote = try C.new(Value, Value{ .symbol = try S.getOrRegister("quote") });
             return .{
-                try C.newConsValue(quote, try C.newConsValue(value, C.empty())),
+                try C.newCons(quote, try C.newCons(value, C.empty())),
                 rest,
             };
         },
         TokenKind.int => |int| {
-            const atom = try C.newNumberValue(int);
+            const atom = try C.new(Value, Value{ .number = int });
             return .{ atom, tokens[1..] };
         },
         TokenKind.symbol => |symbol| {
-            const atom = try C.newSymbolValue(symbol);
+            const atom = try C.new(Value, Value{ .symbol = symbol });
             return .{ atom, tokens[1..] };
         },
         TokenKind.right => @panic("unbalanced parens"),
@@ -72,7 +72,7 @@ fn parseList(tokens: []const T) anyerror!struct { ValueRef, []const T } {
             // Parse following S-exprs
             const cdr, rest = try parseList(rest);
             // Meld the results of them
-            const ret = try C.newConsValue(car, cdr);
+            const ret = try C.newCons(car, cdr);
             return .{ ret, rest };
         },
     }

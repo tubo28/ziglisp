@@ -7,8 +7,10 @@ const S = @import("symbol.zig");
 const alloc = C.alloc;
 const EvalResult = C.EvalResult;
 const f = C.f;
+const new = C.new;
 const t = C.t;
 const toSlice = C.toSlice;
+const Value = C.Value;
 const ValueRef = C.ValueRef;
 
 const Env = @import("env.zig").Env;
@@ -35,9 +37,9 @@ pub fn loadBuiltin() !EnvRef {
     defer new_binds.deinit();
 
     for (100_000_000.., 0..func.len) |sid, i|
-        try new_binds.append(.{ sid, try C.newBFunctionValue(i) });
+        try new_binds.append(.{ sid, try new(Value, Value{ .b_func = i }) });
     for (200_000_000.., 0..spf.len) |sid, i|
-        try new_binds.append(.{ sid, try C.newBSpecialForm(i) });
+        try new_binds.append(.{ sid, try new(Value, Value{ .b_spf = i }) });
 
     const ret = try Env.new();
     return ret.overwrite(try new_binds.toOwnedSlice());
@@ -88,12 +90,12 @@ fn defineFunction(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
     var sym_params = try alloc.alloc(S.ID, slice.len - 1);
     for (slice[1..], 0..) |arg, i| sym_params[i] = arg.symbol;
 
-    const func_val = try C.newFunctionValue(try C.newFunction(
-        name.symbol,
-        sym_params,
-        body,
-        env,
-    ));
+    const func_val = try new(Value, Value{ .function = try new(C.Function, C.Function{
+        .name = name.symbol,
+        .params = sym_params,
+        .body = body,
+        .env = env,
+    }) });
     return .{ func_val, try env.overwriteOne(name.symbol, func_val) };
 }
 
@@ -141,7 +143,7 @@ fn cdr(args: []ValueRef) anyerror!ValueRef {
 
 // built-in func
 fn cons_(args: []ValueRef) anyerror!ValueRef {
-    return C.newConsValue(args[0], args[1]);
+    return C.newCons(args[0], args[1]);
 }
 
 // built-in func
@@ -150,7 +152,7 @@ fn list(xs: []ValueRef) anyerror!ValueRef {
     var i = xs.len;
     while (i > 0) {
         i -= 1;
-        ret = try C.newConsValue(xs[i], ret);
+        ret = try C.newCons(xs[i], ret);
     }
     return ret;
 }
@@ -159,7 +161,7 @@ fn list(xs: []ValueRef) anyerror!ValueRef {
 fn add(xs: []ValueRef) anyerror!ValueRef {
     var ret: i64 = 0;
     for (xs) |x| ret += x.number;
-    return C.newNumberValue(ret);
+    return C.new(Value, Value{ .number = ret });
 }
 
 // built-in func
@@ -168,7 +170,7 @@ fn sub(xs: []ValueRef) anyerror!ValueRef {
     for (xs, 0..) |x, i| {
         if (i == 0) ret += x.number else ret -= x.number;
     }
-    return C.newNumberValue(ret);
+    return C.new(Value, Value{ .number = ret });
 }
 
 // built-in func
@@ -177,21 +179,23 @@ fn mul(xs: []ValueRef) anyerror!ValueRef {
     for (xs, 0..) |x, i| {
         if (i == 0) ret *= x.number;
     }
-    return C.newNumberValue(ret);
+    return C.new(Value, Value{ .number = ret });
 }
 
 // built-in func
 fn quotient(xs: []ValueRef) anyerror!ValueRef {
     const a = xs[0].number;
     const b = xs[1].number;
-    return C.newNumberValue(@divFloor(a, b));
+    const ret = @divFloor(a, b);
+    return C.new(Value, Value{ .number = ret });
 }
 
 // built-in func
 fn modulo(xs: []ValueRef) anyerror!ValueRef {
     const a = xs[0].number;
     const b = xs[1].number;
-    return C.newNumberValue(@mod(a, b));
+    const ret = @mod(a, b);
+    return C.new(Value, Value{ .number = ret });
 }
 
 // built-in func
@@ -251,11 +255,13 @@ fn lambda(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
     var val_params = try toSlice(params);
     var sym_params = try alloc.alloc(S.ID, val_params.len);
     for (val_params, 0..) |a, i| sym_params[i] = a.symbol;
-    const func_val = try C.newFunctionValue(try C.newFunction(
-        null,
-        sym_params,
-        body,
-        env,
-    ));
+    const func_val = try C.new(Value, Value{
+        .function = try new(C.Function, C.Function{
+            .name = null,
+            .params = sym_params,
+            .body = body,
+            .env = env,
+        }),
+    });
     return .{ func_val, env };
 }

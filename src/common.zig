@@ -17,10 +17,10 @@ pub const Cons = struct {
     cdr: ValueRef,
 };
 
-pub fn newCons(car: ValueRef, cdr: ValueRef) !*Cons {
-    var cons: *Cons = try alloc.create(Cons);
-    cons.* = Cons{ .car = car, .cdr = cdr };
-    return cons;
+pub fn new(ty: anytype, x: ty) !*ty {
+    var ret: *ty = try alloc.create(ty);
+    ret.* = x;
+    return ret;
 }
 
 /// Node of tree.
@@ -34,34 +34,11 @@ pub const Value = union(enum) {
     b_spf: usize,
 };
 
-pub fn newBFunctionValue(i: usize) !ValueRef {
-    var ret = try alloc.create(Value);
-    ret.* = Value{ .b_func = i };
-    return ret;
-}
-
-pub fn newBSpecialForm(i: usize) !ValueRef {
-    var ret = try alloc.create(Value);
-    ret.* = Value{ .b_spf = i };
-    return ret;
-}
-
-pub fn newConsValue(car: ValueRef, cdr: ValueRef) !ValueRef {
-    var ret = try alloc.create(Value);
-    ret.* = Value{ .cons = try newCons(car, cdr) };
-    return ret;
-}
-
-pub fn newNumberValue(x: i64) !ValueRef {
-    var ret = try alloc.create(Value);
-    ret.* = Value{ .number = x };
-    return ret;
-}
-
-pub fn newSymbolValue(x: SymbolID) !ValueRef {
-    var ret = try alloc.create(Value);
-    ret.* = Value{ .symbol = x };
-    return ret;
+pub fn newCons(car: ValueRef, cdr: ValueRef) !ValueRef {
+    return new(
+        Value,
+        Value{ .cons = try new(Cons, Cons{ .car = car, .cdr = cdr }) },
+    );
 }
 
 pub const Function = struct {
@@ -70,23 +47,6 @@ pub const Function = struct {
     body: []ValueRef,
     env: EnvRef, // captured env (lexical scope)
 };
-
-pub fn newFunctionValue(func: *const Function) !ValueRef {
-    var ret = try alloc.create(Value);
-    ret.* = Value{ .function = func };
-    return ret;
-}
-
-pub fn newFunction(name: ?SymbolID, params: []SymbolID, body: []ValueRef, env: EnvRef) !*Function {
-    var ret: *Function = try alloc.create(Function);
-    ret.* = Function{
-        .name = name,
-        .params = params,
-        .body = body,
-        .env = env,
-    };
-    return ret;
-}
 
 var empty_opt: ?*Value = null;
 var empty_cons_opt: ?*Cons = null;
@@ -97,7 +57,7 @@ var f_opt: ?*Value = null;
 pub fn empty() ValueRef {
     if (empty_opt) |e| return e;
     var e = alloc.create(Value) catch @panic("failed to alloc nil");
-    empty_cons_opt = newCons(e, e) catch unreachable;
+    empty_cons_opt = new(Cons, Cons{ .car = e, .cdr = e }) catch unreachable;
     e.* = Value{ .cons = empty_cons_opt.? };
     empty_opt = e;
     return empty_opt.?;
