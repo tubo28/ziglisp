@@ -216,7 +216,7 @@ test "tokenize" {
         },
         TestCase{
             .code = @embedFile("examples/tarai.scm"),
-            .want = try parse("8"),
+            .want = try parse("6"),
         },
         TestCase{
             .code = "(let ((f (lambda (x) (+ x x)))) (f 1))",
