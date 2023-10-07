@@ -49,13 +49,17 @@ pub fn loadBuiltin() !EnvRef {
 fn let(args: ValueRef, env: *const Env) anyerror!EvalResult {
     const pairs = _car(args);
     const expr = _cadr(args);
-    const pairsSlice = try toSlice(pairs);
+    var buf: [100]ValueRef = undefined;
+    const len = toSlice(pairs, &buf);
+    const pairsSlice = buf[0..len];
 
     var new_binds = std.ArrayList(struct { S.ID, ValueRef }).init(alloc);
     defer new_binds.deinit();
 
     for (pairsSlice) |p| {
-        const keyVal = try toSlice(p);
+        var keyVal: [2]ValueRef = undefined;
+        const l = toSlice(p, &keyVal);
+        std.debug.assert(l == 2);
         const k = keyVal[0].symbol;
         const v = keyVal[1];
         // No dependency between new values.
@@ -84,7 +88,9 @@ fn defineFunction(args: ValueRef, env: EnvRef) anyerror!EvalResult {
     const params = _car(args);
     const body = _cdr(args);
     std.debug.assert(body != C.empty()); // Ill-formed special form
-    const slice = try toSlice(params);
+    var buf: [100]ValueRef = undefined;
+    const len = toSlice(params, &buf);
+    const slice = buf[0..len];
     const name = slice[0];
 
     var sym_params = try alloc.alloc(S.ID, slice.len - 1);
@@ -277,7 +283,9 @@ fn print(xs: ValueRef) !ValueRef {
 fn lambda(args: ValueRef, env: EnvRef) anyerror!EvalResult {
     const params = _car(args);
     const body = _cdr(args);
-    var val_params = try toSlice(params);
+    var tmp: [100]ValueRef = undefined;
+    const len = toSlice(params, &tmp);
+    const val_params = tmp[0..len];
     var sym_params = try alloc.alloc(S.ID, val_params.len);
     for (val_params, 0..) |a, i| sym_params[i] = a.symbol;
     const func_val = try C.new(Value, Value{

@@ -88,18 +88,16 @@ pub fn t() ValueRef {
 }
 
 // Convert sequence of cons cell like (foo bar buz) to slice.
-pub fn toSlice(head: ValueRef) ![]ValueRef {
-    std.debug.assert(@as(ValueTag, head.*) == ValueTag.cons); // is cons?
-
-    var ret = std.ArrayList(ValueRef).init(alloc); // defer deinit?
+pub fn toSlice(head: ValueRef, to: []ValueRef) usize {
+    var i: usize = 0;
     var h = head;
     while (h != empty()) {
-        // TODO: Check that h is cons
-        const x = h.cons.car;
-        ret.append(x) catch @panic("cannot append");
+        std.debug.assert(@as(ValueTag, h.*) == ValueTag.cons); // is cons?
+        to[i] = h.cons.car;
+        i += 1;
         h = h.cons.cdr;
     }
-    return try ret.toOwnedSlice();
+    return i;
 }
 
 fn write(buf: []u8) void {

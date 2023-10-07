@@ -3,7 +3,6 @@ const std = @import("std");
 const C = @import("common.zig");
 const S = @import("symbol.zig");
 
-const alloc = C.alloc;
 const Env = @import("env.zig").Env;
 const EnvRef = Env.Ref;
 const EvalResult = C.EvalResult;
@@ -100,6 +99,7 @@ fn callFunction(func: *const Function, args: ValueRef) anyerror!ValueRef {
     }
     std.debug.assert(i == func.params.len);
     if (func.name) |name| {
+        // std.log.debug("{s}", .{S.getName(name).?});
         const t = try C.new(Value, Value{ .function = func });
         new_binds[i] = .{ name, t };
         i += 1;
