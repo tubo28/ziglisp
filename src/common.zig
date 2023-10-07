@@ -89,7 +89,7 @@ pub fn t() ValueRef {
 
 // Convert sequence of cons cell like (foo bar buz) to slice.
 pub fn toSlice(head: ValueRef) ![]ValueRef {
-    std.debug.assert(atomp(head) == null); // is cons?
+    std.debug.assert(@as(ValueTag, head.*) == ValueTag.cons); // is cons?
 
     var ret = std.ArrayList(ValueRef).init(alloc); // defer deinit?
     var h = head;
@@ -102,11 +102,15 @@ pub fn toSlice(head: ValueRef) ![]ValueRef {
     return try ret.toOwnedSlice();
 }
 
-fn atomp(cons: ValueRef) ?ValueRef {
-    switch (cons.*) {
-        Value.cons => return null,
-        else => return cons,
-    }
+fn write(buf: []u8) void {
+    for (0..buf.len) |i| buf[i] = @intCast(i);
+}
+
+test "foo" {
+    var buf = try alloc.alloc(u8, 10);
+    write(buf);
+    std.testing.log_level = std.log.Level.debug;
+    std.log.debug("{any}", .{buf});
 }
 
 /// The "deep equal" function for values.
