@@ -37,6 +37,3 @@ pub fn registerUnsafe(s: []const u8, id: ID) !void {
 pub fn getName(s: ID) ?[]const u8 {
     return to_str.get(s);
 }
-
-const preset_mask: ID = 1 << 31;
-const preset_names = [_][]const u8{ "#f", "#t" };

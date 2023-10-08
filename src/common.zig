@@ -49,11 +49,6 @@ pub const Function = struct {
     env: EnvRef, // captured env (lexical scope)
 };
 
-var empty_opt: ?*Value = null;
-var empty_cons_opt: ?*Cons = null;
-var t_opt: ?*Value = null;
-var f_opt: ?*Value = null;
-
 /// empty is a ConsCell such that both its car and cdr are itself.
 pub fn empty() ValueRef {
     if (empty_opt) |e| return e;
@@ -69,25 +64,42 @@ fn emptyCons() *const Cons {
     return empty_cons_opt.?;
 }
 
+var empty_opt: ?*Value = null;
+var empty_cons_opt: ?*Cons = null;
+
+pub fn quote() ValueRef {
+    initSpecialSymbol("quote", &quote_opt);
+    return quote_opt.?;
+}
+
+var quote_opt: ?*Value = null;
+
+/// #f.
+/// The only falsy value.
 pub fn f() ValueRef {
-    if (f_opt) |ff| return ff;
-    var f_ = alloc.create(Value) catch @panic("failed to alloc #f");
-    f_.* = Value{ .symbol = S.getOrRegister("#f") catch unreachable };
-    f_opt = f_;
+    initSpecialSymbol("#f", &f_opt);
     return f_opt.?;
 }
 
-// #t.
-// #t is just a non-special symbol in Scheme but useful to implement interpreter.
+var f_opt: ?*Value = null;
+
+/// #t.
+/// #t is just a non-special symbol in Scheme but useful to implement interpreter.
 pub fn t() ValueRef {
-    if (t_opt) |tt| return tt;
-    var t_ = alloc.create(Value) catch @panic("failed to alloc #t");
-    t_.* = Value{ .symbol = S.getOrRegister("#t") catch @panic("symbol #t not registered") };
-    t_opt = t_;
+    initSpecialSymbol("#t", &t_opt);
     return t_opt.?;
 }
 
-// Convert sequence of cons cell like (foo bar buz) to slice.
+var t_opt: ?*Value = null;
+
+fn initSpecialSymbol(sym: []const u8, dst: *?*Value) void {
+    if (dst.* != null) return;
+    var ptr = alloc.create(Value) catch unreachable;
+    ptr.* = Value{ .symbol = S.getOrRegister(sym) catch unreachable };
+    dst.* = ptr;
+}
+
+/// Convert sequence of cons cell like (foo bar buz) to slice.
 pub fn toSlice(head: ValueRef, to: []ValueRef) usize {
     var i: usize = 0;
     var h = head;
@@ -98,17 +110,6 @@ pub fn toSlice(head: ValueRef, to: []ValueRef) usize {
         h = h.cons.cdr;
     }
     return i;
-}
-
-fn write(buf: []u8) void {
-    for (0..buf.len) |i| buf[i] = @intCast(i);
-}
-
-test "foo" {
-    var buf = try alloc.alloc(u8, 10);
-    write(buf);
-    std.testing.log_level = std.log.Level.debug;
-    std.log.debug("{any}", .{buf});
 }
 
 /// The "deep equal" function for values.
