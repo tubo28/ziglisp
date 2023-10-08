@@ -85,24 +85,27 @@ fn quote(args: ValueRef, env: EnvRef) anyerror!EvalResult {
 // (define (name args) body ...+)
 // The scope is lexical, i.e., the returning 'env' value is a snapshot of the parser's env.
 fn defineFunction(args: ValueRef, env: EnvRef) anyerror!EvalResult {
-    const params = _car(args);
     const body = _cdr(args);
     std.debug.assert(body != C.empty()); // Ill-formed special form
+
     var buf: [100]ValueRef = undefined;
-    const len = toSlice(params, &buf);
-    const slice = buf[0..len];
+    const slice_len = toSlice(_car(args), &buf);
+    const slice = buf[0..slice_len];
     const name = slice[0];
 
-    var sym_params = try alloc.alloc(S.ID, slice.len - 1);
-    for (slice[1..], 0..) |arg, i| sym_params[i] = arg.symbol;
+    var params = try alloc.alloc(S.ID, slice.len - 1);
+    for (slice[1..], 0..) |arg, i| params[i] = arg.symbol;
 
-    const func_val = try new(Value, Value{ .function = try new(C.Function, C.Function{
+    var ret = try new(Value, Value{ .function = try new(C.Function, C.Function{
         .name = name.symbol,
-        .params = sym_params,
+        .params = params,
         .body = body,
-        .env = env,
+        .env = undefined,
     }) });
-    return .{ func_val, try env.overwriteOne(name.symbol, func_val) };
+
+    const new_env = try env.overwriteOne(name.symbol, ret);
+    @constCast(ret.function).env = new_env; // ret points to itself from its env
+    return .{ ret, new_env };
 }
 
 // special form

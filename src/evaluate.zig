@@ -98,12 +98,12 @@ fn callFunction(func: *const Function, args: ValueRef) anyerror!ValueRef {
         }
     }
     std.debug.assert(i == func.params.len);
-    if (func.name) |name| {
-        // std.log.debug("{s}", .{S.getName(name).?});
-        const t = try C.new(Value, Value{ .function = func });
-        new_binds[i] = .{ name, t };
-        i += 1;
-    }
+    // if (func.name) |name| {
+    //     // std.log.debug("{s}", .{S.getName(name).?});
+    //     const t = try C.new(Value, Value{ .function = func });
+    //     new_binds[i] = .{ name, t };
+    //     i += 1;
+    // }
 
     var func_env = try func.env.overwrite(new_binds[0..i]);
 
