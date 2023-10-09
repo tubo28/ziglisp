@@ -32,7 +32,7 @@ $ zig run src/main.zig -- src/examples/y-comb.scm
 55
 ```
 
-Developed under Zig version 0.12.0-dev.494+a8d2ed806.
+Developed under Zig version 0.12.0-dev.789+e6590fea1.
 
 ## Features
 
@@ -49,38 +49,37 @@ Developed under Zig version 0.12.0-dev.494+a8d2ed806.
 Basically respecting [R5RS Scheme](https://docs.racket-lang.org/r5rs/r5rs-std/).
 
 * Functions
-    * `-`
-    * `*`
-    * `+`
-    * `<`
-    * `<=`
-    * `=`
-    * `>`
-    * `>=`
-    * `and`
-    * `car`
-    * `cdr`
-    * `cons`
-    * `length`
-    * `list`
-    * `modulo`
-    * `null?`
-    * `or`
-    * `print`
-    * `quotient`
+  * `*`
+  * `+`
+  * `-`
+  * `<`
+  * `=`
+  * `and`
+  * `car`
+  * `cdr`
+  * `cons`
+  * `list`
+  * `modulo`
+  * `null?`
+  * `or`
+  * `print`
+  * `quotient`
 * Special forms:
-    * `begin`
-    * `cond`
-    * `define`
-    * `if`
-    * `let`
-    * `quote`
+  * `begin`
+  * `cond`
+  * `define`
+  * `if`
+  * `lambda`
+  * `let`
+  * `quote`
+
+Additionally see [builtin.scm](src/builtin.scm).
 
 ## TODOs
 
 - [x] Lambda.
 - [ ] Macro syntax.
-- [ ] Represent environment by tree structure.
+- [x] Represent environment by tree structure.
 - [ ] GC.
 
 ## License
