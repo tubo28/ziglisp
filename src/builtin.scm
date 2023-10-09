@@ -1,3 +1,27 @@
+(define-syntax if
+  (syntax-rules ()
+    ((_ test then else)
+     (cond (test then)
+           (else else)))))
+
+(define-syntax let
+  (syntax-rules ()
+    ((_ ((key val) ...) body ...)
+     ((lambda (key ...) body ...) val ...))))
+
+(define-syntax while
+  (syntax-rules ()
+    ((_ pred b1 ...)
+     (let loop () (when pred b1 ... (loop))))))
+
+(define-syntax for
+  (syntax-rules ()
+    ((_ (i from to) b1 ...)
+     (let loop((i from))
+       (when (< i to)
+	  b1 ...
+	  (loop (1+ i)))))))
+
 (define (not a) (if a '#f '#t))
 (define (<= a b) (not (< b a)))
 (define (> a b) (< b a))

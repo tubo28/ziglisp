@@ -23,7 +23,7 @@ pub fn new(ty: anytype, x: ty) !*ty {
     return ret;
 }
 
-const ValueTag = enum { number, symbol, cons, function, b_func, b_spf };
+pub const ValueTag = enum { number, symbol, cons, function, b_func, b_spf };
 /// Node of tree.
 /// It is a branch only if cons, otherwise leaf.
 pub const Value = union(ValueTag) {
@@ -104,7 +104,11 @@ fn initSpecialSymbol(sym: []const u8, dst: *?*Value) void {
 pub fn toSlice(head: ValueRef, to: []ValueRef) usize {
     var i: usize = 0;
     var h = head;
+    //  std.log.debug("aaaaa", .{});
     while (h != empty()) {
+        // std.log.debug("list: {s}", .{toString(h) catch unreachable});
+        // std.log.debug("car: {s}", .{toString(h.cons.car) catch unreachable});
+        // std.log.debug("cdr: {s}", .{toString(h.cons.cdr) catch unreachable});
         std.debug.assert(@as(ValueTag, h.*) == ValueTag.cons); // is cons?
         to[i] = h.cons.car;
         i += 1;

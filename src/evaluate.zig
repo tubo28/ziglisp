@@ -2,6 +2,7 @@ const std = @import("std");
 
 const C = @import("common.zig");
 const S = @import("symbol.zig");
+const M = @import("macro.zig");
 
 const Env = @import("env.zig").Env;
 const EnvRef = Env.Ref;
@@ -72,11 +73,11 @@ fn call(callable: Callable, args: ValueRef, env: EnvRef) anyerror!EvalResult {
     switch (callable) {
         Callable.bsf => |form| return form(args, env),
         Callable.bfunc => |func| {
-            const argSlice, const new_env = try evalAll(args, env);
+            const argSlice, const new_env = try evalList(args, env);
             return .{ try func(argSlice), new_env };
         },
         Callable.func => |func| {
-            const argSlice, const new_env = try evalAll(args, env);
+            const argSlice, const new_env = try evalList(args, env);
             return .{ try callFunction(func, argSlice), new_env };
         },
     }
@@ -121,7 +122,7 @@ fn callFunction(func: *const Function, args: ValueRef) anyerror!ValueRef {
     return ret;
 }
 
-fn evalAll(list: ValueRef, env: EnvRef) !struct { ValueRef, EnvRef } {
+fn evalList(list: ValueRef, env: EnvRef) !struct { ValueRef, EnvRef } {
     var e = env;
 
     var h = list;
