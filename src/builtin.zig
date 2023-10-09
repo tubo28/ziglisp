@@ -4,6 +4,10 @@ const C = @import("common.zig");
 const E = @import("evaluate.zig");
 const S = @import("symbol.zig");
 
+const _caddr = C._caddr;
+const _cadr = C._cadr;
+const _car = C._car;
+const _cdr = C._cdr;
 const alloc = C.alloc;
 const EvalResult = C.EvalResult;
 const f = C.f;
@@ -321,32 +325,4 @@ fn lambda(args: ValueRef, env: EnvRef) anyerror!EvalResult {
         }),
     });
     return .{ func_val, env };
-}
-
-fn _car(x: ValueRef) ValueRef {
-    return x.cons.car;
-}
-
-fn _cdr(x: ValueRef) ValueRef {
-    return x.cons.cdr;
-}
-
-fn _cddr(x: ValueRef) ValueRef {
-    return _cdr(x).cons.cdr;
-}
-
-fn _cdddr(x: ValueRef) ValueRef {
-    return _cddr(x).cons.cdr;
-}
-
-fn _cadr(x: ValueRef) ValueRef {
-    return _cdr(x).cons.car;
-}
-
-fn _caddr(x: ValueRef) ValueRef {
-    return _cddr(x).cons.car;
-}
-
-fn _cadddr(x: ValueRef) ValueRef {
-    return _cdddr(x).cons.car;
 }

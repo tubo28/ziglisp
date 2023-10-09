@@ -198,3 +198,31 @@ fn consToString(x: *const Cons, builder: *std.ArrayList(u8)) !void {
 //     }
 //     unreachable;
 // }
+
+pub fn _car(x: ValueRef) ValueRef {
+    return x.cons.car;
+}
+
+pub fn _cdr(x: ValueRef) ValueRef {
+    return x.cons.cdr;
+}
+
+pub fn _cddr(x: ValueRef) ValueRef {
+    return _cdr(x).cons.cdr;
+}
+
+pub fn _cdddr(x: ValueRef) ValueRef {
+    return _cddr(x).cons.cdr;
+}
+
+pub fn _cadr(x: ValueRef) ValueRef {
+    return _cdr(x).cons.car;
+}
+
+pub fn _caddr(x: ValueRef) ValueRef {
+    return _cddr(x).cons.car;
+}
+
+pub fn _cadddr(x: ValueRef) ValueRef {
+    return _cdddr(x).cons.car;
+}

@@ -15,14 +15,21 @@ const ValueRef = C.ValueRef;
 
 pub fn main() !void {
     const args = try std.process.argsAlloc(C.alloc);
+    var env = try init();
     if (args.len == 2) {
-        try evalFile(args[1]);
+        try evalFile(args[1], env);
         return;
     }
-    try repl();
+    try repl(env);
 }
 
-fn evalFile(filepath: []const u8) !void {
+fn init() !EnvRef {
+    try S.init();
+    _, const ret = try eval(@embedFile("builtin.scm"), try B.loadBuiltin());
+    return ret;
+}
+
+fn evalFile(filepath: []const u8, env: EnvRef) !void {
     var file = try std.fs.cwd().openFile(filepath, .{});
     defer file.close();
 
@@ -31,15 +38,14 @@ fn evalFile(filepath: []const u8) !void {
 
     var buf: [65536]u8 = undefined;
     const size = try in_stream.readAll(&buf);
-    var env = try loadBuiltin();
     _ = try eval(buf[0..size], env);
 }
 
-fn repl() !void {
+fn repl(env: EnvRef) !void {
     const stdin = std.io.getStdIn().reader();
     const stdout = std.io.getStdOut().writer();
 
-    var env = try loadBuiltin();
+    var e = env;
     while (true) {
         try stdout.print(">>> ", .{});
         const line = readLine(stdin) catch |err| switch (err) {
@@ -48,7 +54,7 @@ fn repl() !void {
         };
         if (line) |l| {
             if (l.len == 0) continue;
-            const result, env = try eval(l, env);
+            const result, e = try eval(l, e);
             try stdout.print("{s}\n", .{try toString(result)});
         }
     }
@@ -64,38 +70,22 @@ fn readLine(reader: anytype) !?[]const u8 {
 }
 
 fn eval(code: []const u8, env: EnvRef) !struct { ValueRef, EnvRef } {
-    const tokens = try T.tokenize(code);
-    const sexprs = try P.parse(tokens);
+    const sexprs = try toAST(code);
     var ret = C.empty();
     var new_env = env;
     for (sexprs) |expr| ret, new_env = try E.evaluate(expr, new_env);
-    // std.log.debug("eval result: {s}", .{tos(ret)});
     return .{ ret, new_env };
 }
 
-fn loadBuiltin() !EnvRef {
-    try S.init();
-    var env = try B.loadBuiltin();
-    const code = @embedFile("builtin.scm");
+fn toAST(code: []const u8) ![]ValueRef {
     const tokens = try T.tokenize(code);
     const sexprs = try P.parse(tokens);
-    for (sexprs) |expr| _, env = try E.evaluate(expr, env);
-    return env;
-}
-
-fn parse(code: []const u8) ![]ValueRef {
-    const tokens = try T.tokenize(code);
-    const sexprs = try P.parse(tokens);
-    // for (sexprs) |expr| {
-    //     std.log.debug("parse result: {s}", .{tos(expr)});
-    // }
     return sexprs;
 }
 
 test "tokenize" {
     std.testing.log_level = std.log.Level.debug;
-
-    const env = try loadBuiltin();
+    const env = try init();
     const TestCase = struct {
         code: []const u8,
         want: []ValueRef,
@@ -104,139 +94,139 @@ test "tokenize" {
     const cases = [_]TestCase{
         TestCase{
             .code = "(+ 1 2)",
-            .want = try parse("3"),
+            .want = try toAST("3"),
         },
         TestCase{
             .code = "(+ 1 2 (+ 3 4) (+ 5 (+ 6 7)) 8 9 10)",
-            .want = try parse("55"),
+            .want = try toAST("55"),
         },
         TestCase{
             .code = "'(1 2 3)",
-            .want = try parse("(1 2 3)"),
+            .want = try toAST("(1 2 3)"),
         },
         TestCase{
             .code = "(length '(1 2 3))",
-            .want = try parse("3"),
+            .want = try toAST("3"),
         },
         TestCase{
             .code = "(+ (length '(a b c)) (length '(d e)))",
-            .want = try parse("5"),
+            .want = try toAST("5"),
         },
         TestCase{
             .code = "(print hello)",
-            .want = try parse("hello"),
+            .want = try toAST("hello"),
         },
         TestCase{
             .code = "(begin (print hello) (print world) (+ (length '(a b c)) (length '(d e))))",
-            .want = try parse("5"),
+            .want = try toAST("5"),
         },
         TestCase{
             .code = "(car '(a b c))",
-            .want = try parse("a"),
+            .want = try toAST("a"),
         },
         TestCase{
             .code = "(car '((a b) (c d)))",
-            .want = try parse("(a b)"),
+            .want = try toAST("(a b)"),
         },
         TestCase{
             .code = "(let ((menu '(tea coffee milk))) (car menu))",
-            .want = try parse("tea"),
+            .want = try toAST("tea"),
         },
         TestCase{
             .code = "(let ((menu '(tea coffee milk))) (cdr menu))",
-            .want = try parse("(coffee milk)"),
+            .want = try toAST("(coffee milk)"),
         },
         TestCase{
             .code = "(let ((menu '(tea coffee milk))) (cdr (cdr menu)))",
-            .want = try parse("(milk)"),
+            .want = try toAST("(milk)"),
         },
         TestCase{
             .code = "(define x 1) (define y (+ x 1)) (+ x y)",
-            .want = try parse("3"),
+            .want = try toAST("3"),
         },
         TestCase{
             .code = "(begin (define (x) 1) (x))",
-            .want = try parse("1"),
+            .want = try toAST("1"),
         },
         TestCase{
             .code = "(begin (define (double x) (+ x x)) (double 1))",
-            .want = try parse("2"),
+            .want = try toAST("2"),
         },
         TestCase{
             .code = "(begin (define (double x) (+ x x)) (double (double 1)))",
-            .want = try parse("4"),
+            .want = try toAST("4"),
         },
         TestCase{
             .code = "(define (double x) (+ x x)) (double (double 1))",
-            .want = try parse("4"),
+            .want = try toAST("4"),
         },
         TestCase{
             .code = "(if t 'true 'false)",
-            .want = try parse("true"),
+            .want = try toAST("true"),
         },
         TestCase{
             .code = "(if 0 'true 'false)",
-            .want = try parse("true"),
+            .want = try toAST("true"),
         },
         TestCase{
             .code = "(if #f 'true 'false)",
-            .want = try parse("false"),
+            .want = try toAST("false"),
         },
         TestCase{
             .code = "(if #t 'true)",
-            .want = try parse("true"),
+            .want = try toAST("true"),
         },
         TestCase{
             .code = "(if #f 'true)",
-            .want = try parse("()"),
+            .want = try toAST("()"),
         },
         TestCase{
             .code = @embedFile("examples/fibonacci.scm"),
-            .want = try parse("89"),
+            .want = try toAST("89"),
         },
         TestCase{
             .code = "(let ((x 1) (y 2)) (+ 1 2))",
-            .want = try parse("3"),
+            .want = try toAST("3"),
         },
         TestCase{
             .code = "(cond ((= 0 1) 'foo) ((= 0 0) 'bar))",
-            .want = try parse("bar"),
+            .want = try toAST("bar"),
         },
         TestCase{
             .code = "(cond ((= 0 1) 'foo) (t 'bar))",
-            .want = try parse("bar"),
+            .want = try toAST("bar"),
         },
         TestCase{
             .code = "(cond ((= 0 1) 'foo) ((= 0 2) 'bar))",
-            .want = try parse("()"),
+            .want = try toAST("()"),
         },
         TestCase{
             .code = @embedFile("examples/mergesort.scm"),
-            .want = try parse("(1 1 2 3 3 4 5 5 5 6 7 8 9 9 9)"),
+            .want = try toAST("(1 1 2 3 3 4 5 5 5 6 7 8 9 9 9)"),
         },
         TestCase{
             .code = @embedFile("examples/quicksort.scm"),
-            .want = try parse("(1 1 2 3 3 4 5 5 5 6 7 8 9 9 9)"),
+            .want = try toAST("(1 1 2 3 3 4 5 5 5 6 7 8 9 9 9)"),
         },
         TestCase{
             .code = @embedFile("examples/tarai.scm"),
-            .want = try parse("6"),
+            .want = try toAST("6"),
         },
         TestCase{
             .code = "(let ((f (lambda (x) (+ x x)))) (f 1))",
-            .want = try parse("2"),
+            .want = try toAST("2"),
         },
         TestCase{
             .code = "((lambda (x) (+ x x)) 1)",
-            .want = try parse("2"),
+            .want = try toAST("2"),
         },
         TestCase{
             .code = @embedFile("examples/y-comb.scm"),
-            .want = try parse("55"),
+            .want = try toAST("55"),
         },
         TestCase{
             .code = @embedFile("examples/y-comb2.scm"),
-            .want = try parse("(1 1 2 3 5 8 13 21 34 55 89 144 233 377 610 987 1597 2584 4181 6765 10946)"),
+            .want = try toAST("(1 1 2 3 5 8 13 21 34 55 89 144 233 377 610 987 1597 2584 4181 6765 10946)"),
         },
     };
 
