@@ -98,21 +98,26 @@ fn defineF(args: ValueRef, env: EnvRef) anyerror!EvalResult {
     var buf: [100]ValueRef = undefined;
     const slice_len = toSlice(_car(args), &buf);
     const slice = buf[0..slice_len];
-    const name = slice[0];
+
     var params = try alloc.alloc(S.ID, slice.len - 1);
     for (slice[1..], 0..) |arg, i| params[i] = arg.symbol;
 
+    const name = slice[0].symbol;
     const body = _cdr(args);
 
-    var ret = try new(Value, Value{ .function = try new(C.Function, C.Function{
-        .name = name.symbol,
+    var ret = try new(Value, undefined);
+    const new_env = try env.overwriteOne(name, ret);
+    const func_val = try new(C.Function, C.Function{
+        .name = name,
         .params = params,
-        .body = body,
-        .env = undefined,
-    }) });
+        .body = undefined,
+        .env = new_env,
+    });
 
-    const new_env = try env.overwriteOne(name.symbol, ret);
-    @constCast(ret.function).env = new_env; // ret points to itself from its env
+    // TODO: Apply alpha conversion to body with new_env
+    func_val.body = body;
+
+    ret.* = Value{ .function = func_val };
     return .{ ret, new_env };
 }
 

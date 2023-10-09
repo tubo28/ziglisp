@@ -47,6 +47,7 @@ pub const Function = struct {
     params: []SymbolID,
     body: ValueRef, // cons list
     env: EnvRef, // captured env (lexical scope)
+    // TODO: Add table for function argument to make beta reduction faster
 };
 
 /// empty is a ConsCell such that both its car and cdr are itself.
