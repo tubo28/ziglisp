@@ -23,7 +23,7 @@ const func_names = [_][]const u8{ "car", "cdr", "cons", "list", "print", "+", "-
 pub const func = [_]*const Function{ car, cdr, cons_, list, print, add, sub, mul, eq, le, or_, and_, null_, quotient, modulo };
 
 const spf_names = [_][]const u8{ "quote", "begin", "define", "lambda", "if", "cond", "let" };
-pub const spf = [_]*const SpecialForm{ quote, begin, defineFunction, lambda, if_, cond, let };
+pub const spf = [_]*const SpecialForm{ quote, begin, define, lambda, if_, cond, let };
 
 pub fn loadBuiltin() !EnvRef {
     // Bind symbol and symbol id
@@ -82,19 +82,27 @@ fn quote(args: ValueRef, env: EnvRef) anyerror!EvalResult {
 }
 
 // special form
+// Define function or value
+fn define(args: ValueRef, env: EnvRef) anyerror!EvalResult {
+    std.debug.assert(_cdr(args) != C.empty()); // Ill-formed special form
+    switch (_car(args).*) {
+        Value.cons => return defineF(args, env),
+        Value.symbol => return defineV(args, env),
+        else => unreachable,
+    }
+}
+
 // (define (name args) body ...+)
 // The scope is lexical, i.e., the returning 'env' value is a snapshot of the parser's env.
-fn defineFunction(args: ValueRef, env: EnvRef) anyerror!EvalResult {
-    const body = _cdr(args);
-    std.debug.assert(body != C.empty()); // Ill-formed special form
-
+fn defineF(args: ValueRef, env: EnvRef) anyerror!EvalResult {
     var buf: [100]ValueRef = undefined;
     const slice_len = toSlice(_car(args), &buf);
     const slice = buf[0..slice_len];
     const name = slice[0];
-
     var params = try alloc.alloc(S.ID, slice.len - 1);
     for (slice[1..], 0..) |arg, i| params[i] = arg.symbol;
+
+    const body = _cdr(args);
 
     var ret = try new(Value, Value{ .function = try new(C.Function, C.Function{
         .name = name.symbol,
@@ -106,6 +114,14 @@ fn defineFunction(args: ValueRef, env: EnvRef) anyerror!EvalResult {
     const new_env = try env.overwriteOne(name.symbol, ret);
     @constCast(ret.function).env = new_env; // ret points to itself from its env
     return .{ ret, new_env };
+}
+
+// (define id expr)
+fn defineV(args: ValueRef, env: EnvRef) anyerror!EvalResult {
+    const id = _car(args).symbol;
+    const expr = _cadr(args);
+    const val, _ = try E.evaluate(expr, env); // Assume that RHS has no side-effect.
+    return .{ val, try env.overwriteOne(id, val) };
 }
 
 // special form

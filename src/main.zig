@@ -151,6 +151,10 @@ test "tokenize" {
             .want = try parse("(milk)"),
         },
         TestCase{
+            .code = "(define x 1) (define y (+ x 1)) (+ x y)",
+            .want = try parse("3"),
+        },
+        TestCase{
             .code = "(begin (define (x) 1) (x))",
             .want = try parse("1"),
         },
