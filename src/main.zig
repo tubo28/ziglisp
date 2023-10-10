@@ -81,7 +81,7 @@ fn eval(code: []const u8, env: EnvRef) !struct { ValueRef, EnvRef } {
 fn toAST(code: []const u8) ![]ValueRef {
     const tokens = try T.tokenize(code);
     const sexprs = try P.parse(tokens);
-    return M.preproc(sexprs);
+    return sexprs;
 }
 
 test "tokenize" {

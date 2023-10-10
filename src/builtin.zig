@@ -8,6 +8,7 @@ const _caddr = C._caddr;
 const _cadr = C._cadr;
 const _car = C._car;
 const _cdr = C._cdr;
+const _cddr = C._cddr;
 const alloc = C.alloc;
 const EvalResult = C.EvalResult;
 const f = C.f;
@@ -16,6 +17,8 @@ const t = C.t;
 const toSlice = C.toSlice;
 const Value = C.Value;
 const ValueRef = C.ValueRef;
+const Macro = C.Macro;
+const MacroRule = C.MacroRule;
 
 const Env = @import("env.zig").Env;
 const EnvRef = Env.Ref;
@@ -26,10 +29,13 @@ pub const SpecialForm = fn (ValueRef, EnvRef) anyerror!EvalResult;
 const func_names = [_][]const u8{ "car", "cdr", "cons", "list", "print", "+", "-", "*", "=", "<", "or", "and", "null?", "quotient", "modulo" };
 pub const func = [_]*const Function{ car, cdr, cons_, list, print, add, sub, mul, eq, le, or_, and_, null_, quotient, modulo };
 
-const spf_names = [_][]const u8{ "quote", "begin", "define", "lambda", "if", "cond", "let" };
-pub const spf = [_]*const SpecialForm{ quote, begin, define, lambda, if_, cond, let };
+const spf_names = [_][]const u8{ "quote", "begin", "define", "lambda", "if", "cond", "let", "define-syntax" };
+pub const spf = [_]*const SpecialForm{ quote, begin, define, lambda, if_, cond, let, defineSyntax };
 
 pub fn loadBuiltin() !EnvRef {
+    std.debug.assert(func_names.len == func.len);
+    std.debug.assert(spf_names.len == spf.len);
+
     // Bind symbol and symbol id
     for (func_names, 100_000_000..) |name, sid|
         try S.registerUnsafe(name, sid);
@@ -325,4 +331,46 @@ fn lambda(args: ValueRef, env: EnvRef) anyerror!EvalResult {
         }),
     });
     return .{ func_val, env };
+}
+
+// (define-syntax id expr)
+// (syntax-rules (literal-id ...)
+//   ((id pattern) template) ...)
+
+// (define-syntax if
+//   (syntax-rules ()
+//     ((_ test then else)
+//      (cond (test then)
+//            (else else)))))
+// (define-syntax incf
+//   (syntax-rules ()
+//     ((_ x) (begin (set! x (+ x 1)) x))
+//     ((_ x i) (begin (set! x (+ x i)) x))))
+fn defineSyntax(lst: ValueRef, env: EnvRef) anyerror!EvalResult {
+    const name = _car(lst).symbol;
+    const m = try new(Macro, Macro{
+        .name = name,
+        .rules = try parseRules(_cadr(lst)),
+    });
+    const macro = try new(Value, Value{ .macro = m });
+    return .{ macro, try env.overwriteOne(name, macro) };
+}
+
+fn parseRules(lst: ValueRef) ![]MacroRule {
+    const syntax_rules = try S.getOrRegister("syntax-rules");
+
+    std.debug.assert(_car(lst).symbol == syntax_rules);
+    std.debug.assert(_cadr(lst) == C.empty()); // TODO
+
+    var rules: []ValueRef = make_rules_slice: {
+        var buf: [100]ValueRef = undefined;
+        const rules_vr = _cddr(lst);
+        const len = toSlice(rules_vr, &buf);
+        break :make_rules_slice buf[0..len];
+    };
+
+    var ret = try alloc.alloc(MacroRule, rules.len);
+    for (rules, 0..) |r, i|
+        ret[i] = MacroRule{ .pattern = _car(r), .template = _cadr(r) };
+    return ret;
 }

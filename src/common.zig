@@ -23,7 +23,7 @@ pub fn new(ty: anytype, x: ty) !*ty {
     return ret;
 }
 
-pub const ValueTag = enum { number, symbol, cons, function, b_func, b_spf };
+pub const ValueTag = enum { number, symbol, cons, function, macro, b_func, b_spf };
 /// Node of tree.
 /// It is a branch only if cons, otherwise leaf.
 pub const Value = union(ValueTag) {
@@ -31,6 +31,7 @@ pub const Value = union(ValueTag) {
     symbol: SymbolID,
     cons: *const Cons,
     function: *const Function,
+    macro: *const Macro,
     b_func: usize, // Index of table
     b_spf: usize,
 };
@@ -128,6 +129,7 @@ pub fn deepEql(x: ValueRef, y: ValueRef) bool {
         Value.b_func => |x_| return x_ == y.b_func,
         Value.b_spf => |x_| return x_ == y.b_spf,
         Value.cons => |x_| return deepEql(x_.car, y.cons.car) and deepEql(x_.cdr, y.cons.cdr),
+        Value.macro => |x_| return x_.name == y.macro.name,
         Value.function => |x_| return x_.name == y.function.name, // just comparing name
     }
 }
@@ -168,6 +170,11 @@ fn toStringInner(cell: ValueRef, builder: *std.ArrayList(u8)) anyerror!void {
             } else {
                 try builder.appendSlice("<lambda>");
             }
+        },
+        Value.macro => |macro| {
+            try builder.appendSlice("<macro:");
+            try builder.appendSlice(S.getName(macro.name).?);
+            try builder.appendSlice(">");
         },
         Value.b_func => try builder.appendSlice("<builtin function>"),
         Value.b_spf => try builder.appendSlice("<builtin special form>"),
@@ -230,3 +237,13 @@ pub fn _caddr(x: ValueRef) ValueRef {
 pub fn _cadddr(x: ValueRef) ValueRef {
     return _cdddr(x).cons.car;
 }
+
+pub const Macro = struct {
+    name: S.ID,
+    rules: []MacroRule,
+};
+
+pub const MacroRule = struct {
+    pattern: ValueRef, // Consists only of cons or symbol
+    template: ValueRef,
+};
