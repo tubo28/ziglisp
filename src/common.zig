@@ -110,7 +110,7 @@ pub fn toSlice(head: ValueRef, to: []ValueRef) usize {
         // std.log.debug("list: {s}", .{toString(h) catch unreachable});
         // std.log.debug("car: {s}", .{toString(h.cons.car) catch unreachable});
         // std.log.debug("cdr: {s}", .{toString(h.cons.cdr) catch unreachable});
-        std.debug.assert(@as(ValueTag, h.*) == ValueTag.cons); // is cons?
+        std.debug.assert(h.* == .cons); // is cons?
         to[i] = h.cons.car;
         i += 1;
         h = h.cons.cdr;

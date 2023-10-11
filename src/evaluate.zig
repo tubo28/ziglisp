@@ -29,11 +29,11 @@ pub fn evaluate(x: ValueRef, env: EnvRef) anyerror!EvalResult {
                 unreachable;
             }
 
-            if (@as(C.ValueTag, cons.car.*) == C.ValueTag.symbol and
-                if (env.get(cons.car.symbol)) |v| @as(C.ValueTag, v.*) == C.ValueTag.macro else false)
+            if (cons.car.* == .symbol and
+                if (env.get(cons.car.symbol)) |v| v.* == .macro else false)
             {
                 const name = cons.car.symbol;
-                std.log.err("macro {s}!", .{S.getName(name).?});
+                std.log.err("macro `{s}`", .{S.getName(name).?});
                 const macro = env.get(name).?.macro;
                 const expr = try expandMacro(cons.cdr, macro);
                 return evaluate(expr, env);
@@ -75,13 +75,13 @@ const Callable = union(enum) {
 };
 
 fn toCallable(car: *const C.Value, env: EnvRef) !Callable {
-    if (@as(C.ValueTag, car.*) == C.ValueTag.cons) {
+    if (car.* == .cons) {
         // example: ((lambda (x) (+ x x)) 1)
         const lmd, _ = try evaluate(car, env);
         return Callable{ .func = lmd.function };
     }
 
-    if (@as(C.ValueTag, car.*) == C.ValueTag.symbol) {
+    if (car.* == .symbol) {
         const sym = car.symbol;
         const callable = env.get(sym);
         if (callable == null) {
@@ -170,26 +170,3 @@ fn evalList(list: ValueRef, env: EnvRef) !struct { ValueRef, EnvRef } {
 
     return .{ ret, e };
 }
-
-// pub fn preproc(exprs: []ValueRef) ![]ValueRef {
-//     var ret = std.ArrayList(ValueRef).init(C.alloc);
-
-//     var macros = std.AutoHashMap(S.ID, Macro).init(C.alloc);
-//     // Ignores `define-syntax` on non top level position.
-//     for (exprs) |expr| {
-//         if (@as(C.ValueTag, expr.*) == C.ValueTag.cons and
-//             @as(C.ValueTag, expr.cons.car.*) == C.ValueTag.symbol and
-//             expr.cons.car.symbol == try S.getOrRegister("define-syntax"))
-//         {
-//             const macro = Macro{
-//                 .name = C._cadr(expr).symbol,
-//                 .rules = try C.parseRules(C._caddr(expr)),
-//             };
-//             try macros.put(macro.name, macro);
-//             continue;
-//         }
-
-//         try ret.append(expr);
-//     }
-//     return ret.toOwnedSlice();
-// }
