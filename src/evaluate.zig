@@ -53,9 +53,18 @@ fn expandMacro(expr: ValueRef, macro: *const Macro) !ValueRef {
     unreachable;
 }
 
-fn matchRule(expr: ValueRef, rule: MacroRule) bool {
-    _ = rule;
-    _ = expr;
+fn matchRule(macro: *const Macro, template: ValueRef, expr: ValueRef) bool {
+    const us = S.getName("_").?;
+
+    if (@as(C.ValueTag, template) != @as(C.ValueTag, expr.*)) return false;
+    switch (template.*) {
+        Value.symbol => return true,
+        Value.cons => |cons| {
+            if (cons.car == us) return expr.cons.car == macro.name;
+
+            return matchRule(cons.car, expr.cons.car) and matchRule(cons.cdr, expr.cons.cdr);
+        },
+    }
     unreachable;
 }
 
