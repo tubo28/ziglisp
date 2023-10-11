@@ -48,21 +48,120 @@ pub fn evaluate(x: ValueRef, env: EnvRef) anyerror!EvalResult {
 
 // expr -> expr
 fn expandMacro(expr: ValueRef, macro: *const Macro) !ValueRef {
-    _ = macro;
-    _ = expr;
-    unreachable;
+    var rule: MacroRule = undefined;
+    var matched = false;
+    for (macro.rules) |r| {
+        if (try matchPattern(macro.name, r.pattern, expr)) {
+            rule = r;
+            matched = false;
+        }
+    }
+    if (!matched) {
+        std.log.err("expression doesn't match any rule of macro {s}", .{S.getName(macro.name).?});
+        unreachable;
+    }
+
+    return expr;
 }
 
-fn matchRule(macro: *const Macro, template: ValueRef, expr: ValueRef) bool {
-    const us = S.getName("_").?;
+fn symbolp(x: ValueRef) ?SymbolID {
+    switch (x.*) {
+        Value.symbol => |s| return s,
+        else => return null,
+    }
+}
 
-    if (@as(C.ValueTag, template) != @as(C.ValueTag, expr.*)) return false;
-    switch (template.*) {
-        Value.symbol => return true,
+fn matches(name: []const u8, pat: []const u8, in: []const u8) !bool {
+    const P = @import("parse.zig");
+    const T = @import("tokenize.zig");
+    const p = (try P.parse(try T.tokenize(pat)))[0];
+    const i = (try P.parse(try T.tokenize(in)))[0];
+    return try matchPattern(try S.getOrRegister(name), p, i);
+}
+
+test "pattern matching" {
+    try S.init();
+    try std.testing.expect(try matches("macro", "(_ a b)", "(macro 0 1)"));
+    try std.testing.expect(!try matches("macro", "(_ a b)", "(bad 0 1)"));
+    try std.testing.expect(try matches("macro", "(_ (a (b c) d))", "(macro (0 (1 2) 3))"));
+    try std.testing.expect(!try matches("macro", "(_ (a (b c) d))", "(macro (0 1 2 3))"));
+    try std.testing.expect(try matches("macro", "(_ a ...)", "(macro 0)"));
+    try std.testing.expect(try matches("macro", "(_ a ...)", "(macro 0 1)"));
+    try std.testing.expect(try matches("macro", "(_ a ...)", "(macro 0 1 2)"));
+    try std.testing.expect(!try matches("macro", "(_ (a b) ...)", "(macro 0 1 2)"));
+    try std.testing.expect(try matches("macro", "(_ (a b) ...)", "(macro (0 1))"));
+    try std.testing.expect(try matches("macro", "(_ (a b) ...)", "(macro (0 1) (2 3))"));
+}
+
+// name:
+//  if
+// template:
+// (define-syntax if
+//   (syntax-rules ()
+//     ((_ test then else)
+//      (cond (test then)
+//            (else else)))))
+// epxr:
+// (if a foo bar)
+fn matchPattern(name: SymbolID, pattern: ValueRef, input: ValueRef) !bool { // Want to return match detail
+    const self_name = try S.getOrRegister("_");
+    const dots = try S.getOrRegister("...");
+
+    switch (pattern.*) {
+        Value.number => |x| {
+            if (input.* != .number) return false;
+            return x == input.number;
+        },
+        Value.symbol => |s| {
+            std.log.debug("bind {s} => {any}", .{ S.getName(s).?, input });
+            return true;
+        },
         Value.cons => |cons| {
-            if (cons.car == us) return expr.cons.car == macro.name;
+            if (input.* != .cons) return false;
+            if (symbolp(cons.car) == self_name) {
+                if (symbolp(input.cons.car) != name) return false;
+                return matchPattern(name, cons.cdr, input.cons.cdr);
+            }
 
-            return matchRule(cons.car, expr.cons.car) and matchRule(cons.cdr, expr.cons.cdr);
+            const p_list = blk: {
+                var tmp: [100]ValueRef = undefined;
+                const l = C.toSlice(pattern, &tmp);
+                break :blk tmp[0..l];
+            };
+            const i_list = blk: {
+                var tmp: [100]ValueRef = undefined;
+                const l = C.toSlice(input, &tmp);
+                break :blk tmp[0..l];
+            };
+
+            const p_len = p_list.len;
+            const i_len = i_list.len;
+            if (p_list.len == 0) return i_len == 0;
+            if (p_list.len == 1) return matchPattern(name, p_list[0], i_list[0]);
+            if (p_list.len >= 2) {
+                // Does template ends with '...'?
+                if (p_list[p_len - 1].* == .symbol and p_list[p_len - 1].symbol == dots) {
+                    // If Input is too short, doesn't match.
+                    if (i_len < p_len - 1) return false;
+                    // Check leading elements matches.
+                    for (p_list[0 .. p_len - 1], i_list[0 .. p_len - 1]) |t, i|
+                        if (!try matchPattern(name, t, i)) return false;
+                    // Check trailing elements matches element just before '...'
+                    for (i_list[p_len - 1 .. i_len]) |i| {
+                        if (!try matchPattern(name, p_list[p_len - 2], i)) return false;
+                    }
+                    return true;
+                } else {
+                    if (p_len != i_len) return false;
+                    for (p_list, i_list) |t, e|
+                        if (!try matchPattern(name, t, e)) return false;
+                    return true;
+                }
+            }
+        },
+        else => {
+            std.log.err("invalid template", .{});
+            unreachable;
         },
     }
     unreachable;
