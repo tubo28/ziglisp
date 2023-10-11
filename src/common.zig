@@ -102,7 +102,7 @@ fn initSpecialSymbol(sym: []const u8, dst: *?*Value) void {
 }
 
 /// Convert sequence of cons cell like (foo bar buz) to slice.
-pub fn toSlice(head: ValueRef, to: []ValueRef) usize {
+pub fn toSlice(head: ValueRef, to: []ValueRef) []ValueRef {
     var i: usize = 0;
     var h = head;
     //  std.log.debug("aaaaa", .{});
@@ -115,7 +115,7 @@ pub fn toSlice(head: ValueRef, to: []ValueRef) usize {
         i += 1;
         h = h.cons.cdr;
     }
-    return i;
+    return to[0..i];
 }
 
 /// The "deep equal" function for values.

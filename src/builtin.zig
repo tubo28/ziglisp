@@ -60,16 +60,15 @@ fn let(args: ValueRef, env: *const Env) anyerror!EvalResult {
     const pairs = _car(args);
     const expr = _cadr(args);
     var buf: [100]ValueRef = undefined;
-    const len = toSlice(pairs, &buf);
-    const pairsSlice = buf[0..len];
+    const pairsSlice = toSlice(pairs, &buf);
 
     var new_binds = std.ArrayList(struct { S.ID, ValueRef }).init(alloc);
     defer new_binds.deinit();
 
     for (pairsSlice) |p| {
-        var keyVal: [2]ValueRef = undefined;
-        const l = toSlice(p, &keyVal);
-        std.debug.assert(l == 2);
+        var tmp: [2]ValueRef = undefined;
+        const keyVal = toSlice(p, &tmp);
+        std.debug.assert(keyVal.len == 2);
         const k = keyVal[0].symbol;
         const v = keyVal[1];
         // No dependency between new values.
@@ -106,8 +105,7 @@ fn define(args: ValueRef, env: EnvRef) anyerror!EvalResult {
 // The scope is lexical, i.e., the returning 'env' value is a snapshot of the parser's env.
 fn defineF(args: ValueRef, env: EnvRef) anyerror!EvalResult {
     var buf: [100]ValueRef = undefined;
-    const slice_len = toSlice(_car(args), &buf);
-    const slice = buf[0..slice_len];
+    const slice = toSlice(_car(args), &buf);
 
     var params = try alloc.alloc(S.ID, slice.len - 1);
     for (slice[1..], 0..) |arg, i| params[i] = arg.symbol;
@@ -318,8 +316,7 @@ fn lambda(args: ValueRef, env: EnvRef) anyerror!EvalResult {
     const params = _car(args);
     const body = _cdr(args);
     var tmp: [100]ValueRef = undefined;
-    const len = toSlice(params, &tmp);
-    const val_params = tmp[0..len];
+    const val_params = toSlice(params, &tmp);
     var sym_params = try alloc.alloc(S.ID, val_params.len);
     for (val_params, 0..) |a, i| sym_params[i] = a.symbol;
     const func_val = try C.new(Value, Value{
@@ -362,12 +359,8 @@ fn parseRules(lst: ValueRef) ![]MacroRule {
     std.debug.assert(_car(lst).symbol == syntax_rules);
     std.debug.assert(_cadr(lst) == C.empty()); // TODO
 
-    var rules: []ValueRef = make_rules_slice: {
-        var buf: [100]ValueRef = undefined;
-        const rules_vr = _cddr(lst);
-        const len = toSlice(rules_vr, &buf);
-        break :make_rules_slice buf[0..len];
-    };
+    var tmp: [100]ValueRef = undefined;
+    const rules = toSlice(_cddr(lst), &tmp);
 
     var ret = try alloc.alloc(MacroRule, rules.len);
     for (rules, 0..) |r, i|
