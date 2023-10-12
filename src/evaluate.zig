@@ -89,16 +89,9 @@ fn testMatches(name: []const u8, pat: []const u8, in: []const u8) !bool {
     var iter = result.iterator();
     while (iter.next()) |entry| {
         std.log.debug("{s} -> ", .{S.getName(entry.key_ptr.*).?});
-        switch (entry.value_ptr.*.*) {
-            MapTo.single => |s| {
-                std.log.debug("  single {any}", .{s});
-            },
-            MapTo.variadic => |list| {
-                for (list.items[0..list.items.len]) |v| {
-                    std.log.debug("  variadic {any}", .{v});
-                }
-            },
-        }
+        const items = entry.value_ptr.*.items;
+        for (items[0..items.len]) |v|
+            std.log.debug("  variadic {any}", .{v});
     }
     return ret;
 }
@@ -120,12 +113,7 @@ test "pattern matching" {
     try std.testing.expect(try testMatches("macro", "(_ (a b) ...)", "(macro (0 1) (2 3))"));
 }
 
-const SymbolMap = std.AutoHashMap(SymbolID, *MapTo);
-
-const MapTo = union(enum) {
-    single: ValueRef,
-    variadic: *std.ArrayList(ValueRef),
-};
+const SymbolMap = std.AutoHashMap(SymbolID, *std.ArrayList(ValueRef));
 
 // name:
 //  if
@@ -149,20 +137,12 @@ fn matchPattern(name: SymbolID, pattern: ValueRef, input: ValueRef, map: *Symbol
         },
         Value.symbol => |s| {
             const get_result = try map.getOrPut(s);
-            if (get_result.found_existing) {
-                switch (get_result.value_ptr.*.*) {
-                    MapTo.single => |single| {
-                        var variadic = try C.new(std.ArrayList(ValueRef), undefined);
-                        variadic.* = std.ArrayList(ValueRef).init(C.alloc);
-                        try variadic.append(single);
-                        try variadic.append(input);
-                        get_result.value_ptr.* = try C.new(MapTo, MapTo{ .variadic = variadic });
-                    },
-                    MapTo.variadic => |list| try list.append(input),
-                }
-            } else {
-                get_result.value_ptr.* = try C.new(MapTo, MapTo{ .single = input });
+            const list = get_result.value_ptr;
+            if (!get_result.found_existing) {
+                var new = std.ArrayList(ValueRef).init(C.alloc);
+                list.* = try C.new(std.ArrayList(ValueRef), new);
             }
+            try list.*.append(input);
             return true;
         },
         Value.cons => |cons| {

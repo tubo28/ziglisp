@@ -73,3 +73,19 @@
 ; //     ((my-if test then else)
 ; //      (cond (test then)
 ; //            (else else)))))
+
+; (define-syntax my-unless
+;   (syntax-rules ()
+;     [(_ condition body ...)
+;       (if (not condition) ;; 大域的な名前空間に所属する not: 論理否定を意味する本来の定義である。
+;         (begin body ...)
+;       )
+;     ]
+;   )
+; )
+
+; (let ([not (lambda (b) b)]) ;; 局所的な名前空間に所属する not: 論理否定を意味する本来のものとは異なる定義である。
+;   (my-unless #t
+;     (display "この文は出力されることはない！") (newline)
+;   )
+; )
