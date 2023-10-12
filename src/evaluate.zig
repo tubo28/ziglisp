@@ -35,7 +35,13 @@ pub fn evaluate(x: ValueRef, env: EnvRef) anyerror!EvalResult {
                 const name = cons.car.symbol;
                 std.log.err("macro `{s}`", .{S.getName(name).?});
                 const macro = env.get(name).?.macro;
-                const expr = try expandMacro(cons.cdr, macro);
+                const matched = try matches(x, macro);
+                if (matched == null) {
+                    std.log.err("expression doesn't match any rule of macro {s}", .{S.getName(macro.name).?});
+                    unreachable;
+                }
+                const rule, const map = matched.?;
+                const expr = expand(x, rule, map);
                 return evaluate(expr, env);
             }
 
@@ -46,25 +52,23 @@ pub fn evaluate(x: ValueRef, env: EnvRef) anyerror!EvalResult {
     }
 }
 
-// expr -> expr
-fn expandMacro(expr: ValueRef, macro: *const Macro) !ValueRef {
-    _ = macro;
-    var rule: MacroRule = undefined;
-    _ = rule;
-    var matched = false;
-    _ = matched;
-    // for (macro.rules) |r| {
-    //     if (try matchPattern(macro.name, r.pattern, expr)) {
-    //         rule = r;
-    //         matched = false;
-    //     }
-    // }
-    // if (!matched) {
-    //     std.log.err("expression doesn't match any rule of macro {s}", .{S.getName(macro.name).?});
-    //     unreachable;
-    // }
+fn expand(input: ValueRef, rule: MacroRule, map: SymbolMap) ValueRef {
+    const map_to = rule.template;
+    _ = map_to;
+    _ = map;
+    return input;
+}
 
-    return expr;
+// Returns which MacroRule input matches to.
+fn matches(input: ValueRef, macro: *const Macro) !?struct { MacroRule, SymbolMap } {
+    var result = SymbolMap.init(C.alloc);
+    for (macro.rules) |r| {
+        result.clearRetainingCapacity();
+        if (try matchPattern(macro.name, r.pattern, input, &result)) {
+            return .{ r, result };
+        }
+    }
+    return null;
 }
 
 fn symbolp(x: ValueRef) ?SymbolID {
@@ -74,34 +78,54 @@ fn symbolp(x: ValueRef) ?SymbolID {
     }
 }
 
-// fn matches(name: []const u8, pat: []const u8, in: []const u8) !bool {
-//     const P = @import("parse.zig");
-//     const T = @import("tokenize.zig");
-//     const p = (try P.parse(try T.tokenize(pat)))[0];
-//     const i = (try P.parse(try T.tokenize(in)))[0];
-//     return try matchPattern(try S.getOrRegister(name), p, i);
-// }
+fn testMatches(name: []const u8, pat: []const u8, in: []const u8) !bool {
+    const P = @import("parse.zig");
+    const T = @import("tokenize.zig");
+    const p = (try P.parse(try T.tokenize(pat)))[0];
+    const i = (try P.parse(try T.tokenize(in)))[0];
+    var result = SymbolMap.init(C.alloc);
+    const ret = try matchPattern(try S.getOrRegister(name), p, i, &result);
+    std.log.debug("match result:", .{});
+    var iter = result.iterator();
+    while (iter.next()) |entry| {
+        std.log.debug("{s} -> ", .{S.getName(entry.key_ptr.*).?});
+        switch (entry.value_ptr.*.*) {
+            MapTo.single => |s| {
+                std.log.debug("  single {any}", .{s});
+            },
+            MapTo.variadic => |list| {
+                for (list.items[0..list.items.len]) |v| {
+                    std.log.debug("  variadic {any}", .{v});
+                }
+            },
+        }
+    }
+    return ret;
+}
 
-// test "pattern matching" {
-//     try S.init();
-//     try std.testing.expect(try matches("macro", "(_ a b)", "(macro 0 1)"));
-//     try std.testing.expect(!try matches("macro", "(_ a b)", "(bad 0 1)"));
-//     try std.testing.expect(try matches("macro", "(_ (a (b c) d))", "(macro (0 (1 2) 3))"));
-//     try std.testing.expect(!try matches("macro", "(_ (a (b c) d))", "(macro (0 1 2 3))"));
-//     try std.testing.expect(try matches("macro", "(_ a ...)", "(macro 0)"));
-//     try std.testing.expect(try matches("macro", "(_ a ...)", "(macro 0 1)"));
-//     try std.testing.expect(try matches("macro", "(_ a ...)", "(macro 0 1 2)"));
-//     try std.testing.expect(!try matches("macro", "(_ (a b) ...)", "(macro 0 1 2)"));
-//     try std.testing.expect(try matches("macro", "(_ (a b) ...)", "(macro (0 1))"));
-//     try std.testing.expect(try matches("macro", "(_ (a b) ...)", "(macro (0 1) (2 3))"));
-// }
+test "pattern matching" {
+    std.testing.log_level = std.log.Level.debug;
+    try S.init();
+    try std.testing.expect(try testMatches("macro", "(_ a b)", "(macro 0 1)"));
+    try std.testing.expect(!try testMatches("macro", "(_ a b)", "(bad 0 1)"));
+    try std.testing.expect(try testMatches("macro", "(_ (a (b c) d))", "(macro (0 (1 2) 3))"));
+    try std.testing.expect(!try testMatches("macro", "(_ (a (b c) d))", "(macro (0 1 2 3))"));
+    // TODO
+    // try std.testing.expect(try matches("macro", "(_ a ...)", "(macro)"));
+    try std.testing.expect(try testMatches("macro", "(_ a ...)", "(macro 0)"));
+    try std.testing.expect(try testMatches("macro", "(_ a ...)", "(macro 0 1)"));
+    try std.testing.expect(try testMatches("macro", "(_ a ...)", "(macro 0 1 2)"));
+    try std.testing.expect(!try testMatches("macro", "(_ (a b) ...)", "(macro 0 1 2)"));
+    try std.testing.expect(try testMatches("macro", "(_ (a b) ...)", "(macro (0 1))"));
+    try std.testing.expect(try testMatches("macro", "(_ (a b) ...)", "(macro (0 1) (2 3))"));
+}
 
-// const MatchResult = std.AutoHashMap(SymbolID, MatchTo);
+const SymbolMap = std.AutoHashMap(SymbolID, *MapTo);
 
-// const MatchTo = union(enum) {
-//     single: ValueRef,
-//     variadic: std.ArrayList(ValueRef),
-// };
+const MapTo = union(enum) {
+    single: ValueRef,
+    variadic: *std.ArrayList(ValueRef),
+};
 
 // name:
 //  if
@@ -113,81 +137,76 @@ fn symbolp(x: ValueRef) ?SymbolID {
 //            (else else)))))
 // epxr:
 // (if a foo bar)
-// fn matchPattern(name: SymbolID, pattern: ValueRef, input: ValueRef, result: *MatchResult, variadic: bool) !bool { // Want to return match detail
-//     const self_name = try S.getOrRegister("_");
-//     const dots = try S.getOrRegister("...");
+fn matchPattern(name: SymbolID, pattern: ValueRef, input: ValueRef, map: *SymbolMap) !bool {
+    // TODO: Check pattern has duplicated symbols
+    const self_name = try S.getOrRegister("_");
+    const dots = try S.getOrRegister("...");
 
-//     switch (pattern.*) {
-//         Value.number => |x| {
-//             if (input.* != .number) return false;
-//             return x == input.number;
-//         },
-//         Value.symbol => |s| {
-//             if (variadic) {
-//                 _, const val, const exists = try result.getOrPut(s);
-//                 if (!exists) val.* = MatchTo{ .variadic = try std.ArrayList(ValueRef).init(C.alloc) };
-//                 try val.variadic.append(input);
-//             } else {
-//                 _, const val, const exists = try result.getOrPut(s);
-//                 if (!exists) {
-//                     val.* = MatchTo{ .single = ValueRef };
-//                 } else {
-//                     std.log.err("macro parameter {s} is already bound to {any}", .{ S.getName(s).?, input });
-//                     unreachable;
-//                 }
-//             }
-//             return true;
-//         },
-//         Value.cons => |cons| {
-//             if (input.* != .cons) return false;
-//             if (symbolp(cons.car) == self_name) {
-//                 if (symbolp(input.cons.car) != name) return false;
-//                 return matchPattern(name, cons.cdr, input.cons.cdr);
-//             }
+    switch (pattern.*) {
+        Value.number => |x| {
+            if (input.* != .number) return false;
+            return x == input.number;
+        },
+        Value.symbol => |s| {
+            const get_result = try map.getOrPut(s);
+            if (get_result.found_existing) {
+                switch (get_result.value_ptr.*.*) {
+                    MapTo.single => |single| {
+                        var variadic = try C.new(std.ArrayList(ValueRef), undefined);
+                        variadic.* = std.ArrayList(ValueRef).init(C.alloc);
+                        try variadic.append(single);
+                        try variadic.append(input);
+                        get_result.value_ptr.* = try C.new(MapTo, MapTo{ .variadic = variadic });
+                    },
+                    MapTo.variadic => |list| try list.append(input),
+                }
+            } else {
+                get_result.value_ptr.* = try C.new(MapTo, MapTo{ .single = input });
+            }
+            return true;
+        },
+        Value.cons => |cons| {
+            if (input.* != .cons) return false;
+            if (symbolp(cons.car) == self_name) {
+                if (symbolp(input.cons.car) != name) return false;
+                return matchPattern(name, cons.cdr, input.cons.cdr, map);
+            }
 
-//             const p_list = blk: {
-//                 var tmp: [100]ValueRef = undefined;
-//                 const l = C.toSlice(pattern, &tmp);
-//                 break :blk tmp[0..l];
-//             };
-//             const i_list = blk: {
-//                 var tmp: [100]ValueRef = undefined;
-//                 const l = C.toSlice(input, &tmp);
-//                 break :blk tmp[0..l];
-//             };
+            var tmp: [100]ValueRef = undefined;
+            var tmp2: [100]ValueRef = undefined;
+            var pattern_seq = C.toSlice(pattern, &tmp);
+            const input_seq = C.toSlice(input, &tmp2);
 
-//             const p_len = p_list.len;
-//             const i_len = i_list.len;
-//             if (p_list.len == 0) return i_len == 0;
-//             if (p_list.len == 1) return matchPattern(name, p_list[0], i_list[0]);
-//             if (p_list.len >= 2) {
-//                 // Does template ends with '...'?
-//                 if (p_list[p_len - 1].* == .symbol and p_list[p_len - 1].symbol == dots) {
-//                     // If Input is too short, doesn't match.
-//                     if (i_len < p_len - 1) return false;
-//                     // Check leading elements matches.
-//                     for (p_list[0 .. p_len - 1], i_list[0 .. p_len - 1]) |t, i|
-//                         if (!try matchPattern(name, t, i)) return false;
-//                     // Check trailing elements matches element just before '...'
-//                     for (i_list[p_len - 1 .. i_len]) |i| {
-//                         if (!try matchPattern(name, p_list[p_len - 2], i)) return false;
-//                     }
-//                     return true;
-//                 } else {
-//                     if (p_len != i_len) return false;
-//                     for (p_list, i_list) |t, e|
-//                         if (!try matchPattern(name, t, e)) return false;
-//                     return true;
-//                 }
-//             }
-//         },
-//         else => {
-//             std.log.err("invalid template", .{});
-//             unreachable;
-//         },
-//     }
-//     unreachable;
-// }
+            // If not variadic template.
+            if (pattern_seq.len == input_seq.len) {
+                for (pattern_seq, input_seq) |p, i|
+                    if (!try matchPattern(name, p, i, map)) return false;
+                return true;
+            }
+
+            if (pattern_seq.len < 2) return false; // pattern should contain 'a ...'
+
+            // If length of pattern and input is different, the last symbol of pattern must be '...'.
+            const last = pattern_seq[pattern_seq.len - 1];
+            if (last.* != .symbol or last.symbol != dots) return false;
+            // Too short?
+            if (input_seq.len < pattern_seq.len - 1) return false;
+            // Check before 'pat ...)'
+            for (pattern_seq[0 .. pattern_seq.len - 2], input_seq[0 .. pattern_seq.len - 2]) |t, i|
+                if (!try matchPattern(name, t, i, map)) return false;
+            // Check 'pat ...)'
+            const pat = pattern_seq[pattern_seq.len - 2];
+            for (input_seq[pattern_seq.len - 2 ..]) |i|
+                if (!try matchPattern(name, pat, i, map)) return false;
+            return true;
+        },
+        else => {
+            std.log.err("invalid template", .{});
+            unreachable;
+        },
+    }
+    unreachable;
+}
 
 const Callable = union(enum) {
     bsf: *const Builtin.SpecialForm,

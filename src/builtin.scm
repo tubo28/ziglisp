@@ -62,3 +62,14 @@
       (if (predicate (car lst))
           (cons (car lst) (filter predicate (cdr lst)))
           (filter predicate (cdr lst)))))
+
+; // (define-syntax let
+; //   (syntax-rules ()
+; //     ((let ((key val) ...) body ...)
+; //      ((lambda (key ...) body ...) val ...))))
+
+; // (define-syntax my-if
+; //   (syntax-rules ()
+; //     ((my-if test then else)
+; //      (cond (test then)
+; //            (else else)))))
