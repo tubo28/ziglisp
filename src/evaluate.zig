@@ -238,18 +238,18 @@ fn call(callable: Callable, args: ValueRef, env: EnvRef) anyerror!EvalResult {
 }
 
 fn callFunction(func: *const Function, args: ValueRef) anyerror!ValueRef {
+    var buf: [100]ValueRef = undefined;
+
     var new_binds: [100]struct { SymbolID, ValueRef } = undefined;
     var i: usize = 0;
 
     // Evaluate arguments.
     // Names and the function and arguments overrite function's namespace, what we call shadowing.
     {
-        var h = args;
-        while (h != C.empty()) {
-            const arg = h.cons.car;
+        const vals = C.toArrayListUnmanaged(args, &buf);
+        for (vals.items) |arg| {
             new_binds[i] = .{ func.params[i], arg };
             i += 1;
-            h = h.cons.cdr;
         }
     }
     std.debug.assert(i == func.params.len);
@@ -259,14 +259,8 @@ fn callFunction(func: *const Function, args: ValueRef) anyerror!ValueRef {
     // Eval body.
     std.debug.assert(func.body != C.empty());
     var ret: ValueRef = undefined;
-    {
-        var h = func.body;
-        while (h != C.empty()) {
-            const expr = h.cons.car;
-            ret, func_env = try evaluate(expr, func_env);
-            h = h.cons.cdr;
-        }
-    }
+    const vals = C.toArrayListUnmanaged(func.body, &buf);
+    for (vals.items) |expr| ret, func_env = try evaluate(expr, func_env);
     return ret;
 }
 

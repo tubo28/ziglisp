@@ -23,6 +23,7 @@ const MacroRule = C.MacroRule;
 const Env = @import("env.zig").Env;
 const EnvRef = Env.Ref;
 
+// TODO: Change argument list from ValueRef (cons list) to []ValueRef
 pub const Function = fn (ValueRef) anyerror!ValueRef;
 pub const SpecialForm = fn (ValueRef, EnvRef) anyerror!EvalResult;
 
@@ -151,13 +152,12 @@ fn if_(args: ValueRef, env: EnvRef) anyerror!EvalResult {
 // special form
 fn cond(clauses: ValueRef, env: EnvRef) anyerror!EvalResult {
     var e = env;
-    var h = clauses;
-    while (h != C.empty()) {
-        const cl = _car(h);
+    var buf: [100]ValueRef = undefined;
+    const cs = C.toArrayListUnmanaged(clauses, &buf);
+    for (cs.items) |cl| {
         const pred = _car(cl);
         const p, e = try E.evaluate(pred, e);
         if (toBool(p)) return E.evaluate(_cadr(cl), e);
-        h = _cdr(h);
     }
     return .{ C.empty(), e }; // Return empty if all pred is false.
 }
@@ -167,12 +167,9 @@ fn begin(args: ValueRef, env: EnvRef) anyerror!EvalResult {
     var ret = C.empty();
     var new_env = env;
 
-    var h = args;
-    while (h != C.empty()) {
-        const x = _car(h);
-        ret, new_env = try E.evaluate(x, new_env);
-        h = _cdr(h);
-    }
+    var buf: [100]ValueRef = undefined;
+    const xs = C.toArrayListUnmanaged(args, &buf);
+    for (xs.items) |x| ret, new_env = try E.evaluate(x, new_env);
     return .{ ret, new_env }; // return the last result
 }
 
@@ -200,36 +197,27 @@ fn list(xs: ValueRef) anyerror!ValueRef {
 // built-in func
 fn add(xs: ValueRef) anyerror!ValueRef {
     var ret: i64 = 0;
-    var h = xs;
-    while (h != C.empty()) {
-        const x = _car(h);
-        ret += x.number;
-        h = _cdr(h);
-    }
+    var buf: [100]ValueRef = undefined;
+    const nums = C.toArrayListUnmanaged(xs, &buf);
+    for (nums.items) |x| ret += x.number;
     return C.new(Value, Value{ .number = ret });
 }
 
 // built-in func
 fn sub(xs: ValueRef) anyerror!ValueRef {
     var ret: i64 = 0;
-    var h = xs;
-    while (h != C.empty()) {
-        const x = _car(h);
-        ret += if (h == xs) x.number else -x.number;
-        h = _cdr(h);
-    }
+    var buf: [100]ValueRef = undefined;
+    const nums = C.toArrayListUnmanaged(xs, &buf);
+    for (nums.items, 0..) |x, i| ret += if (i == 0) x.number else -x.number;
     return C.new(Value, Value{ .number = ret });
 }
 
 // built-in func
 fn mul(xs: ValueRef) anyerror!ValueRef {
     var ret: i64 = 1;
-    var h = xs;
-    while (h != C.empty()) {
-        const x = _car(h);
-        ret *= x.number;
-        h = _cdr(h);
-    }
+    var buf: [100]ValueRef = undefined;
+    const nums = C.toArrayListUnmanaged(xs, &buf);
+    for (nums.items) |x| ret *= x.number;
     return C.new(Value, Value{ .number = ret });
 }
 
@@ -247,23 +235,17 @@ fn modulo(xs: ValueRef) anyerror!ValueRef {
 
 // built-in func
 fn or_(xs: ValueRef) anyerror!ValueRef {
-    var h = xs;
-    while (h != C.empty()) {
-        const x = _car(h);
-        if (toBool(x)) return t();
-        h = _cdr(h);
-    }
+    var buf: [100]ValueRef = undefined;
+    const vals = C.toArrayListUnmanaged(xs, &buf);
+    for (vals.items) |x| if (toBool(x)) return t();
     return f();
 }
 
 // built-in func
 fn and_(xs: ValueRef) anyerror!ValueRef {
-    var h = xs;
-    while (h != C.empty()) {
-        const x = _car(h);
-        if (!toBool(x)) return f();
-        h = _cdr(h);
-    }
+    var buf: [100]ValueRef = undefined;
+    const vals = C.toArrayListUnmanaged(xs, &buf);
+    for (vals.items) |x| if (!toBool(x)) return f();
     return t();
 }
 
@@ -297,17 +279,14 @@ fn isF(x: ValueRef) bool {
 
 // built-in func
 fn print(xs: ValueRef) !ValueRef {
-    var h = xs;
-    var ret = C.empty();
-    while (h != C.empty()) {
-        const x = _car(h);
-        ret = x;
+    var buf: [100]ValueRef = undefined;
+    const vals = C.toArrayListUnmanaged(xs, &buf);
+    for (vals.items) |x| {
         const str = try C.toString(x);
         const stdout = std.io.getStdOut().writer();
         nosuspend try stdout.print("#print: {s}\n", .{str});
-        h = _cdr(h);
     }
-    return ret;
+    return vals.getLastOrNull() orelse C.empty();
 }
 
 // special form

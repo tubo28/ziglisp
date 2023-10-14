@@ -105,17 +105,26 @@ fn initSpecialSymbol(sym: []const u8, dst: *?*Value) void {
 pub fn toSlice(head: ValueRef, to: []ValueRef) []ValueRef {
     var i: usize = 0;
     var h = head;
-    //  std.log.debug("aaaaa", .{});
     while (h != empty()) {
-        // std.log.debug("list: {s}", .{toString(h) catch unreachable});
-        // std.log.debug("car: {s}", .{toString(h.cons.car) catch unreachable});
-        // std.log.debug("cdr: {s}", .{toString(h.cons.cdr) catch unreachable});
         std.debug.assert(h.* == .cons); // is cons?
         to[i] = h.cons.car;
         i += 1;
         h = h.cons.cdr;
     }
     return to[0..i];
+}
+
+pub fn toArrayListUnmanaged(cons_list: ValueRef, buf: []ValueRef) std.ArrayListUnmanaged(ValueRef) {
+    var list = std.ArrayListUnmanaged(ValueRef).fromOwnedSlice(buf);
+    list.items.len = 0;
+    var h = cons_list;
+    while (h != empty()) {
+        std.debug.assert(h.* == .cons); // is cons?
+        std.debug.assert(list.items.len < buf.len);
+        list.appendAssumeCapacity(h.cons.car);
+        h = _cdr(h);
+    }
+    return list;
 }
 
 /// The "deep equal" function for values.
