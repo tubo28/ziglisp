@@ -101,19 +101,7 @@ fn initSpecialSymbol(sym: []const u8, dst: *?*Value) void {
     dst.* = ptr;
 }
 
-/// Convert sequence of cons cell like (foo bar buz) to slice.
-pub fn toSlice(head: ValueRef, to: []ValueRef) []ValueRef {
-    var i: usize = 0;
-    var h = head;
-    while (h != empty()) {
-        std.debug.assert(h.* == .cons); // is cons?
-        to[i] = h.cons.car;
-        i += 1;
-        h = h.cons.cdr;
-    }
-    return to[0..i];
-}
-
+/// Convert sequence of cons cell like (foo bar buz) to ArrayListUnmanaged(ValueRef).
 pub fn toArrayListUnmanaged(cons_list: ValueRef, buf: []ValueRef) std.ArrayListUnmanaged(ValueRef) {
     var list = std.ArrayListUnmanaged(ValueRef).fromOwnedSlice(buf);
     list.items.len = 0;
@@ -231,20 +219,8 @@ pub fn _cddr(x: ValueRef) ValueRef {
     return _cdr(x).cons.cdr;
 }
 
-pub fn _cdddr(x: ValueRef) ValueRef {
-    return _cddr(x).cons.cdr;
-}
-
 pub fn _cadr(x: ValueRef) ValueRef {
     return _cdr(x).cons.car;
-}
-
-pub fn _caddr(x: ValueRef) ValueRef {
-    return _cddr(x).cons.car;
-}
-
-pub fn _cadddr(x: ValueRef) ValueRef {
-    return _cdddr(x).cons.car;
 }
 
 pub const Macro = struct {

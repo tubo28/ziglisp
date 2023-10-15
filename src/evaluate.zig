@@ -156,29 +156,30 @@ fn matchPattern(name: SymbolID, pattern: ValueRef, input: ValueRef, map: *Symbol
 
             var tmp: [100]ValueRef = undefined;
             var tmp2: [100]ValueRef = undefined;
-            var pattern_seq = C.toSlice(pattern, &tmp);
-            const input_seq = C.toSlice(input, &tmp2);
+            var pattern_seq = C.toArrayListUnmanaged(pattern, &tmp);
+            const input_seq = C.toArrayListUnmanaged(input, &tmp2);
 
             // If not variadic template.
-            if (pattern_seq.len == input_seq.len) {
-                for (pattern_seq, input_seq) |p, i|
+            if (pattern_seq.items.len == input_seq.items.len) {
+                for (pattern_seq.items, input_seq.items) |p, i|
                     if (!try matchPattern(name, p, i, map)) return false;
                 return true;
             }
 
-            if (pattern_seq.len < 2) return false; // pattern should contain 'a ...'
+            if (pattern_seq.items.len < 2) return false; // pattern should contain 'a ...'
 
             // If length of pattern and input is different, the last symbol of pattern must be '...'.
-            const last = pattern_seq[pattern_seq.len - 1];
+            const last = pattern_seq.getLast();
             if (last.* != .symbol or last.symbol != dots) return false;
             // Too short?
-            if (input_seq.len < pattern_seq.len - 1) return false;
+            if (input_seq.items.len < pattern_seq.items.len - 1) return false;
             // Check before 'pat ...)'
-            for (pattern_seq[0 .. pattern_seq.len - 2], input_seq[0 .. pattern_seq.len - 2]) |t, i|
+            const pattern_len = pattern_seq.items.len;
+            for (pattern_seq.items[0 .. pattern_len - 2], input_seq.items[0 .. pattern_len - 2]) |t, i|
                 if (!try matchPattern(name, t, i, map)) return false;
             // Check 'pat ...)'
-            const pat = pattern_seq[pattern_seq.len - 2];
-            for (input_seq[pattern_seq.len - 2 ..]) |i|
+            const pat = pattern_seq.items[pattern_len - 2];
+            for (input_seq.items[pattern_len - 2 ..]) |i|
                 if (!try matchPattern(name, pat, i, map)) return false;
             return true;
         },
@@ -265,25 +266,4 @@ fn callFunction(func: *const Function, args: []ValueRef) anyerror!ValueRef {
     var ret: ValueRef = C.empty();
     for (func.body) |expr| ret, func_env = try evaluate(expr, func_env);
     return ret;
-}
-
-fn evalList(list: ValueRef, env: EnvRef) !struct { ValueRef, EnvRef } {
-    var e = env;
-
-    var h = list;
-    var slice: [100]ValueRef = undefined;
-    var i: usize = 0;
-    while (h != C.empty()) {
-        const x, e = try evaluate(h.cons.car, e);
-        slice[i] = x;
-        i += 1;
-        h = h.cons.cdr;
-    }
-    var ret = C.empty();
-    while (i != 0) {
-        i -= 1;
-        ret = try C.newCons(slice[i], ret);
-    }
-
-    return .{ ret, e };
 }

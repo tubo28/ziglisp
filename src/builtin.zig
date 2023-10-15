@@ -4,7 +4,6 @@ const C = @import("common.zig");
 const E = @import("evaluate.zig");
 const S = @import("symbol.zig");
 
-const _caddr = C._caddr;
 const _cadr = C._cadr;
 const _car = C._car;
 const _cdr = C._cdr;
@@ -14,7 +13,6 @@ const EvalResult = C.EvalResult;
 const f = C.f;
 const new = C.new;
 const t = C.t;
-const toSlice = C.toSlice;
 const Value = C.Value;
 const ValueRef = C.ValueRef;
 const Macro = C.Macro;
@@ -110,17 +108,14 @@ const SpecialForms = struct {
         std.debug.assert(args.len == 2);
         const pairs = args[0];
         var buf: [100]ValueRef = undefined;
-        const pairsSlice = toSlice(pairs, &buf);
+        const pairsSlice = C.toArrayListUnmanaged(pairs, &buf);
 
         var new_binds = std.ArrayList(struct { S.ID, ValueRef }).init(alloc);
         defer new_binds.deinit();
 
-        for (pairsSlice) |p| {
-            var tmp: [2]ValueRef = undefined;
-            const keyVal = toSlice(p, &tmp);
-            std.debug.assert(keyVal.len == 2);
-            const k = keyVal[0].symbol;
-            const v = keyVal[1];
+        for (pairsSlice.items) |p| {
+            const k = _car(p).symbol;
+            const v = _cadr(p);
             // No dependency between new values.
             const ev, _ = try E.evaluate(v, env);
             try new_binds.append(.{ k, ev });
@@ -150,10 +145,10 @@ const SpecialForms = struct {
     fn defineF(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
         const name, const params, const body = b: {
             var buf: [100]ValueRef = undefined;
-            const slice = toSlice(args[0], &buf);
-            const name = slice[0].symbol;
-            const params = try alloc.alloc(S.ID, slice.len - 1);
-            for (slice[1..], 0..) |arg, i| params[i] = arg.symbol;
+            const slice = C.toArrayListUnmanaged(args[0], &buf);
+            const name = slice.items[0].symbol;
+            const params = try alloc.alloc(S.ID, slice.items.len - 1);
+            for (slice.items[1..], 0..) |arg, i| params[i] = arg.symbol;
 
             const body = try alloc.alloc(ValueRef, args.len - 1);
             std.mem.copy(ValueRef, body, args[1..]);
@@ -219,9 +214,9 @@ const SpecialForms = struct {
         // Convert ValueRefs to symbols
         var sym_params = b: {
             var tmp: [100]ValueRef = undefined;
-            const val_params = toSlice(params, &tmp);
-            var ret = try alloc.alloc(S.ID, val_params.len);
-            for (val_params, 0..) |a, i| ret[i] = a.symbol;
+            const val_params = C.toArrayListUnmanaged(params, &tmp);
+            var ret = try alloc.alloc(S.ID, val_params.items.len);
+            for (val_params.items, 0..) |a, i| ret[i] = a.symbol;
             break :b ret;
         };
         const func_val = try C.new(Value, Value{
@@ -358,10 +353,10 @@ fn parseRules(lst: ValueRef) ![]MacroRule {
     std.debug.assert(_cadr(lst) == C.empty()); // TODO
 
     var tmp: [100]ValueRef = undefined;
-    const rules = toSlice(_cddr(lst), &tmp);
+    const rules = C.toArrayListUnmanaged(_cddr(lst), &tmp);
 
-    var ret = try alloc.alloc(MacroRule, rules.len);
-    for (rules, 0..) |r, i|
+    var ret = try alloc.alloc(MacroRule, rules.items.len);
+    for (rules.items, 0..) |r, i|
         ret[i] = MacroRule{ .pattern = _car(r), .template = _cadr(r) };
     return ret;
 }
