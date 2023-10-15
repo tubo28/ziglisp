@@ -98,7 +98,7 @@ fn testMatches(name: []const u8, pat: []const u8, in: []const u8) !bool {
     return ret;
 }
 
-test "PatternMatching" {
+test "macro/patternMatching" {
     std.testing.log_level = std.log.Level.debug;
     try S.init();
     try std.testing.expect(try testMatches("macro", "(_ a b)", "(macro 0 1)"));
