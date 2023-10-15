@@ -53,6 +53,10 @@
       acc
       (fold func (func acc (car lst)) (cdr lst))))
 
+; TODO: Add this
+; (define (list . items)
+;   (fold cons '() items))
+
 (define (length lst)
   (fold (lambda (acc element) (+ acc 1)) 0 lst))
 

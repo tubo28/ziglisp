@@ -23,6 +23,7 @@ pub fn parse(tokens: []const T) ![]ValueRef {
 /// Parse s-expression based on BFN below.
 /// <sexpr>  ::= <atom>
 ///            | '(' <sexpr>* ')'
+///            | '(' <sexpr>+ '.' <sexpr> ')'
 ///            | <quote> <sexpr>
 fn parseSExpr(tokens: []const T) anyerror!struct { ValueRef, []const T } {
     if (tokens.len == 0)
@@ -51,13 +52,13 @@ fn parseSExpr(tokens: []const T) anyerror!struct { ValueRef, []const T } {
             const atom = try C.new(Value, Value{ .symbol = symbol });
             return .{ atom, tokens[1..] };
         },
-        TokenKind.right => @panic("unbalanced parens"),
+        TokenKind.right, TokenKind.dot => unreachable,
         TokenKind.f => return .{ C.f(), tokens[1..] },
     }
 }
 
-// Parse sequence of s-expression based on BFN below.
-// <S-expr>*
+// Parse sequence of s-expression or dotted pair
+// <S-expr>* | <S-expr>+ '.' <S-expr>
 fn parseList(tokens: []const T) anyerror!struct { ValueRef, []const T } {
     if (tokens.len == 0) return .{ C.empty(), tokens };
 
@@ -66,6 +67,11 @@ fn parseList(tokens: []const T) anyerror!struct { ValueRef, []const T } {
         else => {
             // Parse first S-expr
             const car, var rest = try parseSExpr(tokens);
+            if (rest.len > 0 and rest[0].kind == TokenKind.dot) {
+                const cdr, rest = try parseSExpr(rest[1..]);
+                const ret = try C.newCons(car, cdr);
+                return .{ ret, rest };
+            }
             // Parse following S-exprs
             const cdr, rest = try parseList(rest);
             // Meld the results of them

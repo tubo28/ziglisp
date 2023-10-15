@@ -16,6 +16,7 @@ pub const TokenKind = union(enum) {
     symbol: S.ID,
     left, // (
     right, // )
+    dot, // .
     quote, // '
     f, // #f
 };
@@ -55,6 +56,12 @@ pub fn tokenize(code: []const u8) ![]const Token {
 
         if (code[i] == ')') {
             try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind.right });
+            i += 1;
+            continue;
+        }
+
+        if (code[i] == '.' and !(i + 1 < code.len and code[i + 1] == '.')) {
+            try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind.dot });
             i += 1;
             continue;
         }

@@ -54,6 +54,22 @@ test "batch" {
             .want = try toAST("a"),
         },
         TestCase{
+            .code = "(car '(a . b))",
+            .want = try toAST("a"),
+        },
+        TestCase{
+            .code = "(cdr '(a . b))",
+            .want = try toAST("b"),
+        },
+        TestCase{
+            .code = "(car '(a b . c))",
+            .want = try toAST("a"),
+        },
+        TestCase{
+            .code = "(cdr '(a b . c))",
+            .want = try toAST("(b . c)"),
+        },
+        TestCase{
             .code = "(car '((a b) (c d)))",
             .want = try toAST("(a b)"),
         },
