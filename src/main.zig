@@ -84,7 +84,7 @@ fn toAST(code: []const u8) ![]ValueRef {
     return sexprs;
 }
 
-test "tokenize" {
+test "batch" {
     std.testing.log_level = std.log.Level.debug;
     const env = try init();
     const TestCase = struct {
@@ -104,6 +104,14 @@ test "tokenize" {
         TestCase{
             .code = "'(1 2 3)",
             .want = try toAST("(1 2 3)"),
+        },
+        TestCase{
+            .code = "(< 1 2)",
+            .want = try toAST("#t"),
+        },
+        TestCase{
+            .code = "(> 2 1)",
+            .want = try toAST("#t"),
         },
         TestCase{
             .code = "(length '(1 2 3))",

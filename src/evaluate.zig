@@ -47,7 +47,9 @@ pub fn evaluate(x: ValueRef, env: EnvRef) anyerror!EvalResult {
 
             // Call something
             const c = try toCallable(cons.car, env);
-            return call(c, cons.cdr, env);
+            var buf: [100]ValueRef = undefined;
+            const args = C.toArrayListUnmanaged(cons.cdr, &buf);
+            return call(c, args.items, env);
         },
     }
 }
@@ -96,7 +98,7 @@ fn testMatches(name: []const u8, pat: []const u8, in: []const u8) !bool {
     return ret;
 }
 
-test "pattern matching" {
+test "PatternMatching" {
     std.testing.log_level = std.log.Level.debug;
     try S.init();
     try std.testing.expect(try testMatches("macro", "(_ a b)", "(macro 0 1)"));
@@ -223,44 +225,45 @@ fn toCallable(car: *const C.Value, env: EnvRef) !Callable {
     unreachable;
 }
 
-fn call(callable: Callable, args: ValueRef, env: EnvRef) anyerror!EvalResult {
+fn call(callable: Callable, args: []ValueRef, env: EnvRef) anyerror!EvalResult {
     switch (callable) {
         Callable.bsf => |form| return form(args, env),
         Callable.bfunc => |func| {
-            const argSlice, const new_env = try evalList(args, env);
-            return .{ try func(argSlice), new_env };
+            var to: [100]ValueRef = undefined;
+            const new_env = try evalAll(args, env, &to);
+            return .{ try func(to[0..args.len]), new_env };
         },
         Callable.func => |func| {
-            const argSlice, const new_env = try evalList(args, env);
-            return .{ try callFunction(func, argSlice), new_env };
+            var to: [100]ValueRef = undefined;
+            const new_env = try evalAll(args, env, &to);
+            return .{ try callFunction(func, to[0..args.len]), new_env };
         },
     }
 }
 
-fn callFunction(func: *const Function, args: ValueRef) anyerror!ValueRef {
-    var buf: [100]ValueRef = undefined;
-
-    var new_binds: [100]struct { SymbolID, ValueRef } = undefined;
-    var i: usize = 0;
-
-    // Evaluate arguments.
-    // Names and the function and arguments overrite function's namespace, what we call shadowing.
-    {
-        const vals = C.toArrayListUnmanaged(args, &buf);
-        for (vals.items) |arg| {
-            new_binds[i] = .{ func.params[i], arg };
-            i += 1;
-        }
+fn evalAll(xs: []ValueRef, env: EnvRef, to: []ValueRef) !EnvRef {
+    var e = env;
+    for (xs, 0..) |x, i| {
+        const ret, e = try evaluate(x, e);
+        to[i] = ret;
     }
-    std.debug.assert(i == func.params.len);
+    return e;
+}
 
-    var func_env = try func.env.overwrite(new_binds[0..i]);
+fn callFunction(func: *const Function, args: []ValueRef) anyerror!ValueRef {
+    std.debug.assert(args.len == func.params.len);
+    const len = func.params.len;
+
+    // Make func_env
+    var new_binds: [100]struct { SymbolID, ValueRef } = undefined;
+    // Names and the function and arguments overrite function's namespace, what we call shadowing.
+    for (args, 0..) |arg, i| new_binds[i] = .{ func.params[i], arg };
+    var func_env = try func.env.overwrite(new_binds[0..len]);
 
     // Eval body.
-    std.debug.assert(func.body != C.empty());
-    var ret: ValueRef = undefined;
-    const vals = C.toArrayListUnmanaged(func.body, &buf);
-    for (vals.items) |expr| ret, func_env = try evaluate(expr, func_env);
+    std.debug.assert(func.body.len > 0);
+    var ret: ValueRef = C.empty();
+    for (func.body) |expr| ret, func_env = try evaluate(expr, func_env);
     return ret;
 }
 

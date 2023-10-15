@@ -23,9 +23,8 @@ const MacroRule = C.MacroRule;
 const Env = @import("env.zig").Env;
 const EnvRef = Env.Ref;
 
-// TODO: Change argument list from ValueRef (cons list) to []ValueRef
-pub const Function = fn (ValueRef) anyerror!ValueRef;
-pub const SpecialForm = fn (ValueRef, EnvRef) anyerror!EvalResult;
+pub const Function = fn ([]ValueRef) anyerror!ValueRef;
+pub const SpecialForm = fn ([]ValueRef, EnvRef) anyerror!EvalResult;
 
 const func_names = [_][]const u8{ "car", "cdr", "cons", "list", "print", "+", "-", "*", "=", "<", "or", "and", "null?", "quotient", "modulo" };
 pub const func = [_]*const Function{ car, cdr, cons_, list, print, add, sub, mul, eq, le, or_, and_, null_, quotient, modulo };
@@ -57,9 +56,9 @@ pub fn loadBuiltin() !EnvRef {
 }
 
 // special form
-fn let(args: ValueRef, env: *const Env) anyerror!EvalResult {
-    const pairs = _car(args);
-    const expr = _cadr(args);
+fn let(args: []ValueRef, env: *const Env) anyerror!EvalResult {
+    std.debug.assert(args.len == 2);
+    const pairs = args[0];
     var buf: [100]ValueRef = undefined;
     const pairsSlice = toSlice(pairs, &buf);
 
@@ -78,6 +77,7 @@ fn let(args: ValueRef, env: *const Env) anyerror!EvalResult {
     }
 
     const new_env = try env.overwrite(try new_binds.toOwnedSlice());
+    const expr = args[1];
     return E.evaluate(expr, new_env);
 }
 
@@ -87,15 +87,15 @@ fn defineValue() anyerror!ValueRef {
 }
 
 // special form
-fn quote(args: ValueRef, env: EnvRef) anyerror!EvalResult {
-    return .{ _car(args), env };
+fn quote(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
+    return .{ args[0], env };
 }
 
 // special form
 // Define function or value
-fn define(args: ValueRef, env: EnvRef) anyerror!EvalResult {
-    std.debug.assert(_cdr(args) != C.empty()); // Ill-formed special form
-    switch (_car(args).*) {
+fn define(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
+    std.debug.assert(args.len > 0);
+    switch (args[0].*) {
         Value.cons => return defineF(args, env),
         Value.symbol => return defineV(args, env),
         else => unreachable,
@@ -104,15 +104,18 @@ fn define(args: ValueRef, env: EnvRef) anyerror!EvalResult {
 
 // (define (name args) body ...+)
 // The scope is lexical, i.e., the returning 'env' value is a snapshot of the parser's env.
-fn defineF(args: ValueRef, env: EnvRef) anyerror!EvalResult {
-    var buf: [100]ValueRef = undefined;
-    const slice = toSlice(_car(args), &buf);
+fn defineF(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
+    const name, const params, const body = b: {
+        var buf: [100]ValueRef = undefined;
+        const slice = toSlice(args[0], &buf);
+        const name = slice[0].symbol;
+        const params = try alloc.alloc(S.ID, slice.len - 1);
+        for (slice[1..], 0..) |arg, i| params[i] = arg.symbol;
 
-    var params = try alloc.alloc(S.ID, slice.len - 1);
-    for (slice[1..], 0..) |arg, i| params[i] = arg.symbol;
-
-    const name = slice[0].symbol;
-    const body = _cdr(args);
+        const body = try alloc.alloc(ValueRef, args.len - 1);
+        std.mem.copy(ValueRef, body, args[1..]);
+        break :b .{ name, params, body };
+    };
 
     var ret = try new(Value, undefined);
     const new_env = try env.overwriteOne(name, ret);
@@ -131,18 +134,18 @@ fn defineF(args: ValueRef, env: EnvRef) anyerror!EvalResult {
 }
 
 // (define id expr)
-fn defineV(args: ValueRef, env: EnvRef) anyerror!EvalResult {
-    const id = _car(args).symbol;
-    const expr = _cadr(args);
+fn defineV(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
+    const id = args[0].symbol;
+    const expr = args[1];
     const val, _ = try E.evaluate(expr, env); // Assume that RHS has no side-effect.
     return .{ val, try env.overwriteOne(id, val) };
 }
 
 // special form
-fn if_(args: ValueRef, env: EnvRef) anyerror!EvalResult {
-    const pred = _car(args);
-    const then = _cadr(args);
-    const unless = if (_caddr(args) != C.empty()) _caddr(args) else null;
+fn if_(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
+    const pred = args[0];
+    const then = args[1];
+    const unless = if (args.len >= 3) args[2] else null;
     const p, const new_env = try E.evaluate(pred, env);
     if (toBool(p)) return try E.evaluate(then, new_env);
     if (unless) |u| return try E.evaluate(u, new_env);
@@ -150,11 +153,9 @@ fn if_(args: ValueRef, env: EnvRef) anyerror!EvalResult {
 }
 
 // special form
-fn cond(clauses: ValueRef, env: EnvRef) anyerror!EvalResult {
+fn cond(clauses: []ValueRef, env: EnvRef) anyerror!EvalResult {
     var e = env;
-    var buf: [100]ValueRef = undefined;
-    const cs = C.toArrayListUnmanaged(clauses, &buf);
-    for (cs.items) |cl| {
+    for (clauses) |cl| {
         const pred = _car(cl);
         const p, e = try E.evaluate(pred, e);
         if (toBool(p)) return E.evaluate(_cadr(cl), e);
@@ -163,95 +164,82 @@ fn cond(clauses: ValueRef, env: EnvRef) anyerror!EvalResult {
 }
 
 // special form
-fn begin(args: ValueRef, env: EnvRef) anyerror!EvalResult {
+fn begin(exprs: []ValueRef, env: EnvRef) anyerror!EvalResult {
     var ret = C.empty();
     var new_env = env;
-
-    var buf: [100]ValueRef = undefined;
-    const xs = C.toArrayListUnmanaged(args, &buf);
-    for (xs.items) |x| ret, new_env = try E.evaluate(x, new_env);
+    for (exprs) |expr| ret, new_env = try E.evaluate(expr, new_env);
     return .{ ret, new_env }; // return the last result
 }
 
 // built-in func
-fn car(args: ValueRef) anyerror!ValueRef {
-    return _car(_car(args));
+fn car(args: []ValueRef) anyerror!ValueRef {
+    return _car(args[0]);
 }
 
 // built-in func
-fn cdr(args: ValueRef) anyerror!ValueRef {
-    return _cdr(_car(args));
+fn cdr(args: []ValueRef) anyerror!ValueRef {
+    return _cdr(args[0]);
 }
 
 // built-in func
-fn cons_(args: ValueRef) anyerror!ValueRef {
-    return C.newCons(_car(args), _cadr(args));
+fn cons_(args: []ValueRef) anyerror!ValueRef {
+    return C.newCons(args[0], args[1]);
 }
 
 // built-in func
-fn list(xs: ValueRef) anyerror!ValueRef {
-    if (xs == C.empty()) return xs;
-    return C.newCons(_car(xs), try list(_cdr(xs)));
+fn list(xs: []ValueRef) anyerror!ValueRef {
+    if (xs.len == 0) return C.empty();
+    return C.newCons(xs[0], try list(xs[1..]));
 }
 
 // built-in func
-fn add(xs: ValueRef) anyerror!ValueRef {
+fn add(xs: []ValueRef) anyerror!ValueRef {
     var ret: i64 = 0;
-    var buf: [100]ValueRef = undefined;
-    const nums = C.toArrayListUnmanaged(xs, &buf);
-    for (nums.items) |x| ret += x.number;
+    for (xs) |x| ret += x.number;
     return C.new(Value, Value{ .number = ret });
 }
 
 // built-in func
-fn sub(xs: ValueRef) anyerror!ValueRef {
+fn sub(xs: []ValueRef) anyerror!ValueRef {
     var ret: i64 = 0;
-    var buf: [100]ValueRef = undefined;
-    const nums = C.toArrayListUnmanaged(xs, &buf);
-    for (nums.items, 0..) |x, i| ret += if (i == 0) x.number else -x.number;
+    for (xs, 0..) |x, i| ret += if (i == 0) x.number else -x.number;
     return C.new(Value, Value{ .number = ret });
 }
 
 // built-in func
-fn mul(xs: ValueRef) anyerror!ValueRef {
+fn mul(xs: []ValueRef) anyerror!ValueRef {
     var ret: i64 = 1;
-    var buf: [100]ValueRef = undefined;
-    const nums = C.toArrayListUnmanaged(xs, &buf);
-    for (nums.items) |x| ret *= x.number;
+    for (xs) |x| ret *= x.number;
     return C.new(Value, Value{ .number = ret });
 }
 
 // built-in func
-fn quotient(xs: ValueRef) anyerror!ValueRef {
-    const ret = @divFloor(_car(xs).number, _cadr(xs).number);
+fn quotient(xs: []ValueRef) anyerror!ValueRef {
+    const ret = @divFloor(xs[0].number, xs[1].number);
     return C.new(Value, Value{ .number = ret });
 }
 
 // built-in func
-fn modulo(xs: ValueRef) anyerror!ValueRef {
-    const ret = @mod(_car(xs).number, _cadr(xs).number);
+fn modulo(xs: []ValueRef) anyerror!ValueRef {
+    const ret = @mod(xs[0].number, xs[1].number);
     return C.new(Value, Value{ .number = ret });
 }
 
 // built-in func
-fn or_(xs: ValueRef) anyerror!ValueRef {
-    var buf: [100]ValueRef = undefined;
-    const vals = C.toArrayListUnmanaged(xs, &buf);
-    for (vals.items) |x| if (toBool(x)) return t();
+fn or_(xs: []ValueRef) anyerror!ValueRef {
+    for (xs) |x| if (toBool(x)) return t();
     return f();
 }
 
 // built-in func
-fn and_(xs: ValueRef) anyerror!ValueRef {
-    var buf: [100]ValueRef = undefined;
-    const vals = C.toArrayListUnmanaged(xs, &buf);
-    for (vals.items) |x| if (!toBool(x)) return f();
+fn and_(xs: []ValueRef) anyerror!ValueRef {
+    for (xs) |x| if (!toBool(x)) return f();
     return t();
 }
 
 // built-in func
-fn eq(args: ValueRef) anyerror!ValueRef {
-    if (C.deepEql(_car(args), _cadr(args))) return t();
+fn eq(xs: []ValueRef) anyerror!ValueRef {
+    if (C.deepEql(xs[0], xs[1])) return t();
     return f();
 }
 
@@ -260,13 +248,13 @@ fn toValue(x: bool) anyerror!ValueRef {
 }
 
 // built-in func
-fn le(args: ValueRef) anyerror!ValueRef {
-    return toValue(_car(args).number < _cadr(args).number);
+fn le(xs: []ValueRef) anyerror!ValueRef {
+    return toValue(xs[0].number < xs[1].number);
 }
 
 // built-in func
-fn null_(x: ValueRef) anyerror!ValueRef {
-    return toValue(_car(x) == C.empty());
+fn null_(xs: []ValueRef) anyerror!ValueRef {
+    return toValue(xs[0] == C.empty());
 }
 
 fn toBool(x: ValueRef) bool {
@@ -278,26 +266,31 @@ fn isF(x: ValueRef) bool {
 }
 
 // built-in func
-fn print(xs: ValueRef) !ValueRef {
-    var buf: [100]ValueRef = undefined;
-    const vals = C.toArrayListUnmanaged(xs, &buf);
-    for (vals.items) |x| {
+fn print(xs: []ValueRef) !ValueRef {
+    if (xs.len == 0) return C.empty();
+    for (xs) |x| {
         const str = try C.toString(x);
         const stdout = std.io.getStdOut().writer();
         nosuspend try stdout.print("#print: {s}\n", .{str});
     }
-    return vals.getLastOrNull() orelse C.empty();
+    return xs[xs.len - 1];
 }
 
 // special form
 // (lambda (x y) (+ x y))
-fn lambda(args: ValueRef, env: EnvRef) anyerror!EvalResult {
-    const params = _car(args);
-    const body = _cdr(args);
-    var tmp: [100]ValueRef = undefined;
-    const val_params = toSlice(params, &tmp);
-    var sym_params = try alloc.alloc(S.ID, val_params.len);
-    for (val_params, 0..) |a, i| sym_params[i] = a.symbol;
+fn lambda(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
+    std.debug.assert(args.len >= 2);
+    const params = args[0];
+    const body = try alloc.alloc(ValueRef, args.len - 1);
+    std.mem.copy(ValueRef, body, args[1..]);
+    // Convert ValueRefs to symbols
+    var sym_params = b: {
+        var tmp: [100]ValueRef = undefined;
+        const val_params = toSlice(params, &tmp);
+        var ret = try alloc.alloc(S.ID, val_params.len);
+        for (val_params, 0..) |a, i| ret[i] = a.symbol;
+        break :b ret;
+    };
     const func_val = try C.new(Value, Value{
         .function = try new(C.Function, C.Function{
             .name = null,
@@ -322,11 +315,11 @@ fn lambda(args: ValueRef, env: EnvRef) anyerror!EvalResult {
 //   (syntax-rules ()
 //     ((_ x) (begin (set! x (+ x 1)) x))
 //     ((_ x i) (begin (set! x (+ x i)) x))))
-fn defineSyntax(lst: ValueRef, env: EnvRef) anyerror!EvalResult {
-    const name = _car(lst).symbol;
+fn defineSyntax(lst: []ValueRef, env: EnvRef) anyerror!EvalResult {
+    const name = lst[0].symbol;
     const m = try new(Macro, Macro{
         .name = name,
-        .rules = try parseRules(_cadr(lst)),
+        .rules = try parseRules(lst[1]),
     });
     const macro = try new(Value, Value{ .macro = m });
     return .{ macro, try env.overwriteOne(name, macro) };
