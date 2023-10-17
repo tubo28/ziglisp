@@ -103,27 +103,47 @@ pub fn loadBuiltin() !EnvRef {
     return ret.overwrite(try new_binds.toOwnedSlice());
 }
 
+// lambda and define
 const SpecialForms = struct {
+    // (let [(k v)*] expr)
+    // to
+    // ([lambda (k*) expr] v*)
     fn let(args: []ValueRef, env: *const Env) anyerror!EvalResult {
         std.debug.assert(args.len == 2);
+
         const pairs = args[0];
-        var buf: [100]ValueRef = undefined;
-        const pairsSlice = C.toArrayListUnmanaged(pairs, &buf);
+        const pairsSlice = b: {
+            var buf: [100]ValueRef = undefined;
+            break :b C.toArrayListUnmanaged(pairs, &buf);
+        };
 
-        var new_binds = std.ArrayList(struct { S.ID, ValueRef }).init(alloc);
-        defer new_binds.deinit();
+        const argc = pairsSlice.items.len;
+        var buf = try C.alloc.alloc(ValueRef, argc * 2);
+        defer C.alloc.free(buf);
+        var keys = buf[0..argc];
+        var vals = buf[argc..];
 
-        for (pairsSlice.items) |p| {
-            const k = _car(p).symbol;
-            const v = _cadr(p);
-            // No dependency between new values.
-            const ev, _ = try E.evaluate(v, env);
-            try new_binds.append(.{ k, ev });
+        for (0..argc) |i| {
+            keys[i] = _car(pairsSlice.items[i]);
+            vals[i] = _cadr(pairsSlice.items[i]);
         }
 
-        const new_env = try env.overwrite(try new_binds.toOwnedSlice());
         const expr = args[1];
-        return E.evaluate(expr, new_env);
+
+        const lambda_expr = try C.newCons(
+            // [lambda (k*) expr]
+            try C.newCons(
+                try new(Value, Value{ .symbol = try S.getOrRegister("lambda") }),
+                try C.newCons(
+                    try C.toConsList(keys[0..argc]),
+                    try C.newCons(expr, C.empty()),
+                ),
+            ),
+            // v*
+            try C.toConsList(vals[0..argc]),
+        );
+
+        return try E.evaluate(lambda_expr, env);
     }
 
     fn quote(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
