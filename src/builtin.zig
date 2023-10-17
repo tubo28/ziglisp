@@ -136,7 +136,10 @@ const SpecialForms = struct {
                 try new(Value, Value{ .symbol = try S.getOrRegister("lambda") }),
                 try C.newCons(
                     try C.toConsList(keys[0..argc]),
-                    try C.newCons(expr, C.empty()),
+                    try C.newCons(
+                        expr,
+                        C.empty(),
+                    ),
                 ),
             ),
             // v*
@@ -161,6 +164,7 @@ const SpecialForms = struct {
     }
 
     // (define (name params) body ...+)
+    // Delegates to defineV
     fn defineF(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
         // Convert
         // (define (name param*) body+)
@@ -175,12 +179,16 @@ const SpecialForms = struct {
         lambda_params[0] = name;
         lambda_params[1] = try C.newCons(
             try new(Value, Value{ .symbol = try S.getOrRegister("lambda") }),
-            try C.newCons(params, body),
+            try C.newCons(
+                params,
+                body,
+            ),
         );
         return defineV(&lambda_params, env);
     }
 
     // (define name body)
+    // defineV is the only way to modify the global env.
     fn defineV(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
         std.debug.assert(args.len == 2);
         const name = args[0].symbol;
@@ -196,30 +204,29 @@ const SpecialForms = struct {
         const pred = args[0];
         const then = args[1];
         const unless = if (args.len >= 3) args[2] else null;
-        const p, const new_env = try E.evaluate(pred, env);
-        if (toBool(p)) return try E.evaluate(then, new_env);
-        if (unless) |u| return try E.evaluate(u, new_env);
-        return .{ C.empty(), new_env }; // Return empty if pred is false and unless is not given.
+        const p, _ = try E.evaluate(pred, env);
+        if (toBool(p)) return try E.evaluate(then, env);
+        if (unless) |u| return try E.evaluate(u, env);
+        return .{ C.empty(), env }; // Return empty if pred is false and unless is not given.
     }
 
     fn cond(clauses: []ValueRef, env: EnvRef) anyerror!EvalResult {
-        var e = env;
         for (clauses) |cl| {
             const pred = _car(cl);
-            const p, e = try E.evaluate(pred, e);
-            if (toBool(p)) return E.evaluate(_cadr(cl), e);
+            const p, _ = try E.evaluate(pred, env);
+            if (toBool(p)) return E.evaluate(_cadr(cl), env);
         }
-        return .{ C.empty(), e }; // Return empty if all pred is false.
+        return .{ C.empty(), env }; // Return empty if all pred is false.
     }
 
     fn begin(exprs: []ValueRef, env: EnvRef) anyerror!EvalResult {
         var ret = C.empty();
-        var new_env = env;
-        for (exprs) |expr| ret, new_env = try E.evaluate(expr, new_env);
-        return .{ ret, new_env }; // return the last result
+        for (exprs) |expr| ret, _ = try E.evaluate(expr, env);
+        return .{ ret, env }; // return the last result
     }
 
     // (lambda (x y) (+ x y))
+    // Captures env, that is, scope is lexical
     fn lambda(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
         std.debug.assert(args.len >= 2);
         const params = args[0];
@@ -237,7 +244,7 @@ const SpecialForms = struct {
             .function = try new(C.Function, C.Function{
                 .params = sym_params,
                 .body = body,
-                .env = env,
+                .env = env, // capture env
             }),
         });
         return .{ func_val, env };

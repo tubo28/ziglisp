@@ -231,24 +231,22 @@ fn call(callable: Callable, args: []ValueRef, env: EnvRef) anyerror!EvalResult {
         Callable.bsf => |form| return form(args, env),
         Callable.bfunc => |func| {
             var to: [100]ValueRef = undefined;
-            const new_env = try evalAll(args, env, &to);
-            return .{ try func(to[0..args.len]), new_env };
+            try evalAll(args, env, &to);
+            return .{ try func(to[0..args.len]), env };
         },
         Callable.func => |func| {
             var to: [100]ValueRef = undefined;
-            const new_env = try evalAll(args, env, &to);
-            return .{ try callFunction(func, to[0..args.len]), new_env };
+            try evalAll(args, env, &to);
+            return .{ try callFunction(func, to[0..args.len]), env };
         },
     }
 }
 
-fn evalAll(xs: []ValueRef, env: EnvRef, to: []ValueRef) !EnvRef {
-    var e = env;
+fn evalAll(xs: []ValueRef, env: EnvRef, to: []ValueRef) !void {
     for (xs, 0..) |x, i| {
-        const ret, e = try evaluate(x, e);
+        const ret, _ = try evaluate(x, env);
         to[i] = ret;
     }
-    return e;
 }
 
 fn callFunction(func: *const Function, args: []ValueRef) anyerror!ValueRef {
@@ -257,7 +255,7 @@ fn callFunction(func: *const Function, args: []ValueRef) anyerror!ValueRef {
 
     // Make func_env
     var new_binds: [100]struct { SymbolID, ValueRef } = undefined;
-    // Names and the function and arguments overrite function's namespace, what we call shadowing.
+    // Names of function arguments overwrites function's namespace (shadowing).
     for (args, 0..) |arg, i| new_binds[i] = .{ func.params[i], arg };
     var func_env = try func.env.overwrite(new_binds[0..len]);
 

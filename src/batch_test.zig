@@ -90,15 +90,15 @@ test "batch" {
             .want = try toAST("3"),
         },
         TestCase{
-            .code = "(begin (define (x) 1) (x))",
+            .code = "(define (x) 1) (x)",
             .want = try toAST("1"),
         },
         TestCase{
-            .code = "(begin (define (double x) (+ x x)) (double 1))",
+            .code = "(define (double x) (+ x x)) (double 1)",
             .want = try toAST("2"),
         },
         TestCase{
-            .code = "(begin (define (double x) (+ x x)) (double (double 1)))",
+            .code = "(define (double x) (+ x x)) (double (double 1))",
             .want = try toAST("4"),
         },
         TestCase{
