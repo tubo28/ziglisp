@@ -140,42 +140,36 @@ const SpecialForms = struct {
         }
     }
 
-    // (define (name args) body ...+)
-    // The scope is lexical, i.e., the returning 'env' value is a snapshot of the parser's env.
+    // (define (name params) body ...+)
     fn defineF(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
-        const name, const params, const body = b: {
-            var buf: [100]ValueRef = undefined;
-            const slice = C.toArrayListUnmanaged(args[0], &buf);
-            const name = slice.items[0].symbol;
-            const params = try alloc.alloc(S.ID, slice.items.len - 1);
-            for (slice.items[1..], 0..) |arg, i| params[i] = arg.symbol;
+        // Convert
+        // (define (name param*) body+)
+        // to
+        // (define name (lambda (param*) body+))
+        const a = try C.toConsList(args);
+        const name = _car(_car(a));
+        const params = _cdr(_car(a));
+        const body = _cdr(a);
 
-            const body = try alloc.alloc(ValueRef, args.len - 1);
-            std.mem.copy(ValueRef, body, args[1..]);
-            break :b .{ name, params, body };
-        };
-
-        var ret = try new(Value, undefined);
-        const new_env = try env.overwriteOne(name, ret);
-        const func_val = try new(C.Function, C.Function{
-            .name = name,
-            .params = params,
-            .body = undefined,
-            .env = new_env,
-        });
-
-        // TODO: Apply alpha conversion to body with new_env
-        func_val.body = body;
-
-        ret.* = Value{ .function = func_val };
-        return .{ ret, new_env };
+        var lambda_params: [2]ValueRef = undefined;
+        lambda_params[0] = name;
+        lambda_params[1] = try C.newCons(
+            try new(Value, Value{ .symbol = try S.getOrRegister("lambda") }),
+            try C.newCons(params, body),
+        );
+        return defineV(&lambda_params, env);
     }
 
+    // (define name body)
     fn defineV(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
-        const id = args[0].symbol;
+        std.debug.assert(args.len == 2);
+        const name = args[0].symbol;
+        var bind_to: *Value = try C.new(Value, undefined);
+        const new_env = try env.overwriteOne(name, bind_to);
         const expr = args[1];
-        const val, _ = try E.evaluate(expr, env); // Assume that RHS has no side-effect.
-        return .{ val, try env.overwriteOne(id, val) };
+        const val, _ = try E.evaluate(expr, new_env); // Assume that RHS has no side-effect.
+        bind_to.* = val.*;
+        return .{ val, new_env };
     }
 
     fn if_(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
@@ -221,7 +215,6 @@ const SpecialForms = struct {
         };
         const func_val = try C.new(Value, Value{
             .function = try new(C.Function, C.Function{
-                .name = null,
                 .params = sym_params,
                 .body = body,
                 .env = env,

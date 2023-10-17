@@ -44,9 +44,8 @@ pub fn newCons(car: ValueRef, cdr: ValueRef) !ValueRef {
 }
 
 pub const Function = struct {
-    name: ?SymbolID, // null for lambda
     params: []SymbolID,
-    body: []ValueRef,
+    body: []ValueRef, // TODO: make this single by using begin
     env: EnvRef, // captured env (lexical scope)
     // TODO: Add table for function argument to make beta reduction faster
 };
@@ -115,8 +114,12 @@ pub fn toArrayListUnmanaged(cons_list: ValueRef, buf: []ValueRef) std.ArrayListU
     return list;
 }
 
+pub fn toConsList(list: []ValueRef) !ValueRef {
+    if (list.len == 0) return empty();
+    return try newCons(list[0], try toConsList(list[1..]));
+}
+
 /// The "deep equal" function for values.
-/// Equality of function values are only based on the names.
 pub fn deepEql(x: ValueRef, y: ValueRef) bool {
     if (x == empty() or y == empty()) return x == y;
     if (@as(ValueTag, x.*) != @as(ValueTag, y.*)) return false;
@@ -127,7 +130,7 @@ pub fn deepEql(x: ValueRef, y: ValueRef) bool {
         Value.b_spf => |x_| return x_ == y.b_spf,
         Value.cons => |x_| return deepEql(x_.car, y.cons.car) and deepEql(x_.cdr, y.cons.cdr),
         Value.macro => |x_| return x_.name == y.macro.name,
-        Value.function => |x_| return x_.name == y.function.name, // just comparing name
+        Value.function => unreachable,
     }
 }
 
@@ -159,15 +162,7 @@ fn toStringInner(cell: ValueRef, builder: *std.ArrayList(u8)) anyerror!void {
             try builder.appendSlice(str);
         },
         Value.symbol => |sym| try builder.appendSlice(S.getName(sym).?),
-        Value.function => |func| {
-            if (func.name) |n| {
-                try builder.appendSlice("<function:");
-                try builder.appendSlice(S.getName(n).?);
-                try builder.appendSlice(">");
-            } else {
-                try builder.appendSlice("<lambda>");
-            }
-        },
+        Value.function => try builder.appendSlice("<lambda>"),
         Value.macro => |macro| {
             try builder.appendSlice("<macro:");
             try builder.appendSlice(S.getName(macro.name).?);
