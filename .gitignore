@@ -18,5 +18,5 @@ zig-out/
 /docgen_tmp/
 
 main
-main.o
+main.*
 callgrind.*
