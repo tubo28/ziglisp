@@ -14,15 +14,15 @@ pub const Token = struct {
 pub const TokenKind = union(enum) {
     int: i64,
     symbol: S.ID,
-    left, // (
-    right, // )
+    left, // ( [
+    right, // ) ]
     dot, // .
     quote, // '
     f, // #f
 };
 
 fn isSymbolChar(c: u8) bool {
-    return !std.ascii.isWhitespace(c) and c != ')' and c != '(' and c != '\'';
+    return !std.ascii.isWhitespace(c) and c != '(' and c != ')' and c != '[' and c != ']' and c != '\'';
 }
 
 pub fn tokenize(code: []const u8) ![]const Token {
@@ -48,13 +48,13 @@ pub fn tokenize(code: []const u8) ![]const Token {
             continue;
         }
 
-        if (code[i] == '(') {
+        if (code[i] == '(' or code[i] == '[') {
             try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind.left });
             i += 1;
             continue;
         }
 
-        if (code[i] == ')') {
+        if (code[i] == ')' or code[i] == ')') {
             try toks.append(Token{ .line = line_head, .index = line_pos, .kind = TokenKind.right });
             i += 1;
             continue;
