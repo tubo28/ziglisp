@@ -23,6 +23,7 @@ pub fn evaluate(x: ValueRef, env: EnvRef) anyerror!EvalResult {
         Value.number => return .{ x, env },
         Value.function, Value.b_func, Value.b_spf, Value.macro => unreachable,
         Value.symbol => |sym| return if (env.get(sym)) |ent| .{ ent, env } else .{ x, env },
+        Value.binding => |b| return .{ b.ref, env },
         Value.cons => |cons| {
             if (x == C.empty()) {
                 std.log.err("cannot evaluate empty list", .{});
@@ -204,26 +205,37 @@ fn toCallable(car: *const C.Value, env: EnvRef) !Callable {
         return Callable{ .func = lmd.function };
     }
 
-    if (car.* == .symbol) {
-        const sym = car.symbol;
-        const callable = env.get(sym);
-        if (callable == null) {
-            std.log.err("symbol `{s}` is not callable", .{S.getName(sym).?});
-            unreachable;
-        }
-        switch (callable.?.*) {
-            Value.function => |f_| return Callable{ .func = f_ },
-            Value.b_func => |bf| return Callable{ .bfunc = Builtin.func[bf] },
-            Value.b_spf => |bs| return Callable{ .bsf = Builtin.spf[bs] },
-            else => |other| {
-                std.log.err("symbol `{s}` is bound to non-callable value: {any}", .{ S.getName(sym).?, other });
+    var callable: ValueRef = undefined;
+    var name: SymbolID = undefined;
+    switch (car.*) {
+        Value.symbol => |s| {
+            if (env.get(s)) |v| {
+                name = s;
+                callable = v;
+            } else {
+                std.log.err("not callable: {}", .{car.*});
                 unreachable;
-            },
-        }
+            }
+        },
+        Value.binding => |b| {
+            name = b.symbol;
+            callable = b.ref;
+        },
+        else => {
+            std.log.err("not callable: {}", .{car.*});
+            unreachable;
+        },
     }
 
-    std.log.err("not callable: {}", .{car.*});
-    unreachable;
+    switch (callable.*) {
+        Value.function => |f_| return Callable{ .func = f_ },
+        Value.b_func => |bf| return Callable{ .bfunc = Builtin.func[bf] },
+        Value.b_spf => |bs| return Callable{ .bsf = Builtin.spf[bs] },
+        else => |other| {
+            std.log.err("symbol `{s}` is bound to non-callable value: {any}", .{ S.getName(name).?, other });
+            unreachable;
+        },
+    }
 }
 
 fn call(callable: Callable, args: []ValueRef, env: EnvRef) anyerror!EvalResult {

@@ -122,11 +122,11 @@ const SpecialForms = struct {
         std.debug.assert(args.len == 2);
         const name = args[0].symbol;
         var bind_to: *Value = try C.new(Value, undefined);
-        const new_env = try env.overwriteOne(name, bind_to);
+        try env.globalDef(name, bind_to);
         const expr = args[1];
-        const val, _ = try E.evaluate(expr, new_env); // Assume that RHS has no side-effect.
+        const val, _ = try E.evaluate(expr, env); // Assume that RHS has no side-effect.
         bind_to.* = val.*;
-        return .{ val, new_env };
+        return .{ val, env };
     }
 
     fn if_(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
@@ -199,7 +199,8 @@ const SpecialForms = struct {
             .rules = try parseRules(lst[1]),
         });
         const macro = try new(Value, Value{ .macro = m });
-        return .{ macro, try env.overwriteOne(name, macro) };
+        try env.globalDef(name, macro);
+        return .{ macro, env };
     }
 };
 

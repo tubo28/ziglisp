@@ -23,17 +23,23 @@ pub fn new(ty: anytype, x: ty) !*ty {
     return ret;
 }
 
-pub const ValueTag = enum { number, symbol, cons, function, macro, b_func, b_spf };
+pub const ValueTag = enum { number, symbol, binding, cons, function, macro, b_func, b_spf };
 /// Node of tree.
 /// It is a branch only if cons, otherwise leaf.
 pub const Value = union(ValueTag) {
     number: i64,
     symbol: SymbolID,
+    binding: *Binding,
     cons: *const Cons,
     function: *const Function,
     macro: *const Macro,
     b_func: usize, // Index of table
     b_spf: usize,
+};
+
+const Binding = struct {
+    symbol: SymbolID,
+    ref: ValueRef,
 };
 
 pub fn newCons(car: ValueRef, cdr: ValueRef) !ValueRef {
@@ -126,6 +132,7 @@ pub fn deepEql(x: ValueRef, y: ValueRef) bool {
     switch (x.*) {
         Value.number => |x_| return x_ == y.number,
         Value.symbol => |x_| return x_ == y.symbol,
+        Value.binding => |x_| return deepEql(x_.ref, y.binding.ref),
         Value.b_func => |x_| return x_ == y.b_func,
         Value.b_spf => |x_| return x_ == y.b_spf,
         Value.cons => |x_| return deepEql(x_.car, y.cons.car) and deepEql(x_.cdr, y.cons.cdr),
@@ -162,6 +169,7 @@ fn toStringInner(cell: ValueRef, builder: *std.ArrayList(u8)) anyerror!void {
             try builder.appendSlice(str);
         },
         Value.symbol => |sym| try builder.appendSlice(S.getName(sym).?),
+        Value.binding => |b| try builder.appendSlice(S.getName(b.symbol).?),
         Value.function => try builder.appendSlice("<lambda>"),
         Value.macro => |macro| {
             try builder.appendSlice("<macro:");
