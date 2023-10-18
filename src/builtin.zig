@@ -66,7 +66,6 @@ const spf_names = [_][]const u8{
     "lambda",
     "if",
     "cond",
-    "let",
     "define-syntax",
 };
 pub const spf = [_]*const SpecialForm{
@@ -76,7 +75,6 @@ pub const spf = [_]*const SpecialForm{
     SpecialForms.lambda,
     SpecialForms.if_,
     SpecialForms.cond,
-    SpecialForms.let,
     SpecialForms.defineSyntax,
 };
 
@@ -105,50 +103,6 @@ pub fn loadBuiltin() !EnvRef {
 
 // lambda and define
 const SpecialForms = struct {
-    // (let [(k v)*] expr)
-    // to
-    // ([lambda (k*) expr] v*)
-    fn let(args: []ValueRef, env: *const Env) anyerror!EvalResult {
-        std.debug.assert(args.len == 2);
-
-        const pairs = args[0];
-        const pairsSlice = b: {
-            var buf: [100]ValueRef = undefined;
-            break :b C.toArrayListUnmanaged(pairs, &buf);
-        };
-
-        const argc = pairsSlice.items.len;
-        var buf = try C.alloc.alloc(ValueRef, argc * 2);
-        defer C.alloc.free(buf);
-        var keys = buf[0..argc];
-        var vals = buf[argc..];
-
-        for (0..argc) |i| {
-            keys[i] = _car(pairsSlice.items[i]);
-            vals[i] = _cadr(pairsSlice.items[i]);
-        }
-
-        const expr = args[1];
-
-        const lambda_expr = try C.newCons(
-            // [lambda (k*) expr]
-            try C.newCons(
-                try new(Value, Value{ .symbol = try S.getOrRegister("lambda") }),
-                try C.newCons(
-                    try C.toConsList(keys[0..argc]),
-                    try C.newCons(
-                        expr,
-                        C.empty(),
-                    ),
-                ),
-            ),
-            // v*
-            try C.toConsList(vals[0..argc]),
-        );
-
-        return try E.evaluate(lambda_expr, env);
-    }
-
     fn quote(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
         return .{ args[0], env };
     }
@@ -157,34 +111,9 @@ const SpecialForms = struct {
     fn define(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
         std.debug.assert(args.len > 0);
         switch (args[0].*) {
-            Value.cons => return defineF(args, env),
             Value.symbol => return defineV(args, env),
             else => unreachable,
         }
-    }
-
-    // (define (name params) body ...+)
-    // Delegates to defineV
-    fn defineF(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
-        // Convert
-        // (define (name param*) body+)
-        // to
-        // (define name (lambda (param*) body+))
-        const a = try C.toConsList(args);
-        const name = _car(_car(a));
-        const params = _cdr(_car(a));
-        const body = _cdr(a);
-
-        var lambda_params: [2]ValueRef = undefined;
-        lambda_params[0] = name;
-        lambda_params[1] = try C.newCons(
-            try new(Value, Value{ .symbol = try S.getOrRegister("lambda") }),
-            try C.newCons(
-                params,
-                body,
-            ),
-        );
-        return defineV(&lambda_params, env);
     }
 
     // (define name body)

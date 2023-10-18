@@ -4,7 +4,7 @@ const B = @import("builtin.zig");
 const C = @import("common.zig");
 const E = @import("evaluate.zig");
 const P = @import("parse.zig");
-const M = @import("macro.zig");
+const Pre = @import("preproc.zig");
 const S = @import("symbol.zig");
 const T = @import("tokenize.zig");
 
@@ -81,5 +81,7 @@ pub fn eval(code: []const u8, env: EnvRef) !struct { ValueRef, EnvRef } {
 pub fn toAST(code: []const u8) ![]ValueRef {
     const tokens = try T.tokenize(code);
     const sexprs = try P.parse(tokens);
-    return sexprs;
+    var result = try C.alloc.alloc(ValueRef, sexprs.len);
+    try Pre.preprocessAll(sexprs, result);
+    return result;
 }
