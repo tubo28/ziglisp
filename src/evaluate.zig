@@ -271,9 +271,7 @@ fn callLambda(lambda: *const Lambda, args: []ValueRef) anyerror!ValueRef {
     var lambda_env = try lambda.env.fork(new_binds[0..len]);
 
     // Eval body.
-    std.debug.assert(lambda.body.len > 0);
-    var ret: ValueRef = C.empty();
     // TODO: replace lambda arguments in body to pointer to param
-    for (lambda.body) |expr| ret, lambda_env = try evaluate(expr, lambda_env);
+    const ret, _ = try evaluate(lambda.body, lambda_env);
     return ret;
 }

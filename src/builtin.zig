@@ -154,8 +154,7 @@ const SpecialForms = struct {
     fn lambda(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
         std.debug.assert(args.len >= 2);
         const params = args[0];
-        const body = try alloc.alloc(ValueRef, args.len - 1);
-        std.mem.copy(ValueRef, body, args[1..]);
+        const body = args[1];
         // Convert ValueRefs to symbols
         var sym_params = b: {
             var tmp: [100]ValueRef = undefined;
