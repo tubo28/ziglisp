@@ -7,7 +7,7 @@ const M = @import("macro.zig");
 const Env = @import("env.zig").Env;
 const EnvRef = Env.Ref;
 const EvalResult = C.EvalResult;
-const Function = C.Function;
+const Lambda = C.Lambda;
 const SymbolID = S.ID;
 const Value = C.Value;
 const ValueRef = C.ValueRef;
@@ -21,7 +21,7 @@ const Builtin = @import("builtin.zig");
 pub fn evaluate(x: ValueRef, env: EnvRef) anyerror!EvalResult {
     switch (x.*) {
         Value.number => return .{ x, env },
-        Value.function, Value.b_func, Value.b_spf, Value.macro => unreachable,
+        Value.lambda, Value.b_func, Value.b_spf, Value.macro => unreachable,
         Value.symbol => |sym| return if (env.get(sym)) |ent| .{ ent, env } else .{ x, env },
         Value.binding => |b| return .{ b.ref, env },
         Value.cons => |cons| {
@@ -195,14 +195,14 @@ fn matchPattern(name: SymbolID, pattern: ValueRef, input: ValueRef, map: *Symbol
 const Callable = union(enum) {
     bsf: *const Builtin.SpecialForm,
     bfunc: *const Builtin.Function,
-    func: *const Function,
+    lambda: *const Lambda,
 };
 
 fn toCallable(car: *const C.Value, env: EnvRef) !Callable {
     if (car.* == .cons) {
         // example: ((lambda (x) (+ x x)) 1)
         const lmd, _ = try evaluate(car, env);
-        return Callable{ .func = lmd.function };
+        return Callable{ .lambda = lmd.lambda };
     }
 
     var callable: ValueRef = undefined;
@@ -228,7 +228,7 @@ fn toCallable(car: *const C.Value, env: EnvRef) !Callable {
     }
 
     switch (callable.*) {
-        Value.function => |f_| return Callable{ .func = f_ },
+        Value.lambda => |l| return Callable{ .lambda = l },
         Value.b_func => |bf| return Callable{ .bfunc = Builtin.func[bf] },
         Value.b_spf => |bs| return Callable{ .bsf = Builtin.spf[bs] },
         else => |other| {
@@ -246,10 +246,10 @@ fn call(callable: Callable, args: []ValueRef, env: EnvRef) anyerror!EvalResult {
             try evalAll(args, env, &to);
             return .{ try func(to[0..args.len]), env };
         },
-        Callable.func => |func| {
+        Callable.lambda => |lambda| {
             var to: [100]ValueRef = undefined;
             try evalAll(args, env, &to);
-            return .{ try callFunction(func, to[0..args.len]), env };
+            return .{ try callLambda(lambda, to[0..args.len]), env };
         },
     }
 }
@@ -261,19 +261,19 @@ fn evalAll(xs: []ValueRef, env: EnvRef, to: []ValueRef) !void {
     }
 }
 
-fn callFunction(func: *const Function, args: []ValueRef) anyerror!ValueRef {
-    std.debug.assert(args.len == func.params.len);
-    const len = func.params.len;
+fn callLambda(lambda: *const Lambda, args: []ValueRef) anyerror!ValueRef {
+    std.debug.assert(args.len == lambda.params.len);
+    const len = lambda.params.len;
 
-    // Make func_env
+    // Names of lambda params overwrites caller's namespace (shadowing).
     var new_binds: [100]struct { SymbolID, ValueRef } = undefined;
-    // Names of function arguments overwrites function's namespace (shadowing).
-    for (args, 0..) |arg, i| new_binds[i] = .{ func.params[i], arg };
-    var func_env = try func.env.fork(new_binds[0..len]);
+    for (args, 0..) |arg, i| new_binds[i] = .{ lambda.params[i], arg };
+    var lambda_env = try lambda.env.fork(new_binds[0..len]);
 
     // Eval body.
-    std.debug.assert(func.body.len > 0);
+    std.debug.assert(lambda.body.len > 0);
     var ret: ValueRef = C.empty();
-    for (func.body) |expr| ret, func_env = try evaluate(expr, func_env);
+    // TODO: replace lambda arguments in body to pointer to param
+    for (lambda.body) |expr| ret, lambda_env = try evaluate(expr, lambda_env);
     return ret;
 }

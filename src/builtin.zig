@@ -150,7 +150,7 @@ const SpecialForms = struct {
     }
 
     // (lambda (x y) (+ x y))
-    // Captures env, that is, scope is lexical
+    // Lambda captures outer env (lexical scope).
     fn lambda(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
         std.debug.assert(args.len >= 2);
         const params = args[0];
@@ -165,7 +165,7 @@ const SpecialForms = struct {
             break :b ret;
         };
         const func_val = try C.new(Value, Value{
-            .function = try new(C.Function, C.Function{
+            .lambda = try new(C.Lambda, C.Lambda{
                 .params = sym_params,
                 .body = body,
                 .env = env, // capture env
