@@ -26,7 +26,9 @@ pub fn main() !void {
 
 pub fn init() !EnvRef {
     try S.init();
-    _, const ret = try eval(@embedFile("builtin.scm"), try B.loadBuiltin());
+    try C.init();
+    const env = try B.loadBuiltin();
+    _, const ret = try eval(@embedFile("builtin.scm"), env);
     return ret;
 }
 

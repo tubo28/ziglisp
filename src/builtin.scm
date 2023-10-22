@@ -1,27 +1,3 @@
-;;; (define-syntax if
-;;;   (syntax-rules ()
-;;;     ((_ test then else)
-;;;      (cond (test then)
-;;;            (else else)))))
-
-;;; (define-syntax let
-;;;   (syntax-rules ()
-;;;     ((_ ((key val) ...) body ...)
-;;;      ((lambda (key ...) body ...) val ...))))
-
-;;; (define-syntax while
-;;;   (syntax-rules ()
-;;;     ((_ pred b1 ...)
-;;;      (let loop () (when pred b1 ... (loop))))))
-
-;;; (define-syntax for
-;;;   (syntax-rules ()
-;;;     ((_ (i from to) b1 ...)
-;;;      (let loop((i from))
-;;;        (when (< i to)
-;;; 	  b1 ...
-;;; 	  (loop (1+ i)))))))
-
 (define (not a) (if a '#f '#t))
 (define (<= a b) (not (< b a)))
 (define (> a b) (< b a))
@@ -53,10 +29,6 @@
       acc
       (fold func (func acc (car lst)) (cdr lst))))
 
-; TODO: Add this
-; (define (list . items)
-;   (fold cons '() items))
-
 (define (length lst)
   (fold (lambda (acc element) (+ acc 1)) 0 lst))
 
@@ -66,30 +38,3 @@
       (if (predicate (car lst))
           (cons (car lst) (filter predicate (cdr lst)))
           (filter predicate (cdr lst)))))
-
-; // (define-syntax let
-; //   (syntax-rules ()
-; //     ((let ((key val) ...) body ...)
-; //      ((lambda (key ...) body ...) val ...))))
-
-; // (define-syntax my-if
-; //   (syntax-rules ()
-; //     ((my-if test then else)
-; //      (cond (test then)
-; //            (else else)))))
-
-; (define-syntax my-unless
-;   (syntax-rules ()
-;     [(_ condition body ...)
-;       (if (not condition) ;; 大域的な名前空間に所属する not: 論理否定を意味する本来の定義である。
-;         (begin body ...)
-;       )
-;     ]
-;   )
-; )
-
-; (let ([not (lambda (b) b)]) ;; 局所的な名前空間に所属する not: 論理否定を意味する本来のものとは異なる定義である。
-;   (my-unless #t
-;     (display "この文は出力されることはない！") (newline)
-;   )
-; )

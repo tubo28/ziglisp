@@ -4,11 +4,15 @@ const C = @import("common.zig");
 
 pub const ID = usize;
 
-var sid: ID = undefined;
+var sid: ID = 0;
 var to_id: std.StringHashMap(ID) = undefined;
 var to_str: std.AutoHashMap(ID, []const u8) = undefined;
 
 pub fn init() !void {
+    if (sid != 0) {
+        to_id.clearAndFree();
+        to_str.clearAndFree();
+    }
     sid = 1;
     to_id = std.StringHashMap(ID).init(C.alloc);
     to_str = std.AutoHashMap(ID, []const u8).init(C.alloc);
@@ -19,9 +23,8 @@ pub fn init() !void {
 // TODO: Reduce usage
 pub fn getOrRegister(s: []const u8) !ID {
     std.debug.assert(sid != 0);
-
-    sid += 1;
     if (to_id.get(s)) |id| return id;
+    sid += 100;
     try to_id.put(s, sid);
     try to_str.put(sid, s);
     return sid;

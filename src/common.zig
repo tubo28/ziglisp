@@ -58,12 +58,23 @@ pub const Lambda = struct {
 
 /// empty is a ConsCell such that both its car and cdr are itself.
 pub fn empty() ValueRef {
-    if (empty_opt) |e| return e;
-    var e = alloc.create(Value) catch @panic("failed to alloc nil");
-    empty_cons_opt = new(Cons, Cons{ .car = e, .cdr = e }) catch unreachable;
+    return empty_opt.?;
+}
+
+pub fn init() !void {
+    var e = try alloc.create(Value);
+    empty_cons_opt = try new(Cons, Cons{ .car = e, .cdr = e });
     e.* = Value{ .cons = empty_cons_opt.? };
     empty_opt = e;
-    return empty_opt.?;
+
+    try initSpecialSymbol("#t", &t_opt);
+    try initSpecialSymbol("#f", &f_opt);
+}
+
+fn initSpecialSymbol(sym: []const u8, dst: *?*Value) !void {
+    var ptr = try alloc.create(Value);
+    ptr.* = Value{ .symbol = try S.getOrRegister(sym) };
+    dst.* = ptr;
 }
 
 fn emptyCons() *const Cons {
@@ -71,39 +82,27 @@ fn emptyCons() *const Cons {
     return empty_cons_opt.?;
 }
 
+// var quote_opt: ?*Value = null;
+var f_opt: ?*Value = null;
+var t_opt: ?*Value = null;
+
 var empty_opt: ?*Value = null;
 var empty_cons_opt: ?*Cons = null;
 
-pub fn quote() ValueRef {
-    initSpecialSymbol("quote", &quote_opt);
-    return quote_opt.?;
-}
-
-var quote_opt: ?*Value = null;
+// pub fn quote() ValueRef {
+//     return quote_opt.?;
+// }
 
 /// #f.
 /// The only falsy value.
 pub fn f() ValueRef {
-    initSpecialSymbol("#f", &f_opt);
     return f_opt.?;
 }
-
-var f_opt: ?*Value = null;
 
 /// #t.
 /// #t is just a non-special symbol in Scheme but useful to implement interpreter.
 pub fn t() ValueRef {
-    initSpecialSymbol("#t", &t_opt);
     return t_opt.?;
-}
-
-var t_opt: ?*Value = null;
-
-fn initSpecialSymbol(sym: []const u8, dst: *?*Value) void {
-    if (dst.* != null) return;
-    var ptr = alloc.create(Value) catch unreachable;
-    ptr.* = Value{ .symbol = S.getOrRegister(sym) catch unreachable };
-    dst.* = ptr;
 }
 
 /// Convert sequence of cons cell like (foo bar buz) to ArrayListUnmanaged(ValueRef).

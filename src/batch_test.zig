@@ -171,13 +171,13 @@ test "batch" {
 
     for (cases, 1..) |c, i| {
         const code = c.code;
+        std.log.debug("test {}: {s}", .{ i, code });
         const env = try M.init();
-        const get, _ = try M.eval(code, env);
         const tmp = try M.toAST(c.want);
         const want = tmp[tmp.len - 1];
+        const get, _ = try M.eval(code, env);
         if (!C.deepEql(get, want)) {
-            std.log.debug("test {}: {s}", .{ i, code });
-            std.log.debug("{} is not {}", .{ get, want });
+            std.log.debug("{s} is not {s}", .{ try C.toString(get), try C.toString(want) });
             try std.testing.expect(false);
         }
     }
