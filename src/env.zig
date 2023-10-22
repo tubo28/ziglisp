@@ -6,7 +6,7 @@ const C = @import("common.zig");
 const ValueRef = C.ValueRef;
 const SymbolID = S.ID;
 
-const Map = std.AutoHashMap(SymbolID, ValueRef);
+const Map = std.AutoArrayHashMap(SymbolID, ValueRef);
 
 fn newMap() !*Map {
     const ret = try C.alloc.create(Map);
@@ -38,8 +38,9 @@ pub const Env = struct {
         result.value_ptr.* = v;
     }
 
-    pub fn overwrite(self: *const Self, kvs: []struct { SymbolID, ValueRef }) !Env.Ref {
+    pub fn fork(self: *const Self, kvs: []struct { SymbolID, ValueRef }) !Env.Ref {
         var m = try newMap();
+        try m.ensureTotalCapacity(kvs.len);
         for (kvs) |kv| try m.put(kv[0], kv[1]);
         var ret = try C.alloc.create(Self);
         ret.* = Env{ .map = m, .parent = self, .global = self.global };
@@ -54,7 +55,7 @@ pub const Env = struct {
 
     fn getImpl(self: *const Self, k: SymbolID) ?ValueRef {
         if (self.map.get(k)) |v| return v;
-        if (self.parent) |p| return p.get(k);
+        if (self.parent) |p| return p.getImpl(k);
         return self.global.get(k);
     }
 };

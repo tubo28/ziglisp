@@ -269,7 +269,7 @@ fn callFunction(func: *const Function, args: []ValueRef) anyerror!ValueRef {
     var new_binds: [100]struct { SymbolID, ValueRef } = undefined;
     // Names of function arguments overwrites function's namespace (shadowing).
     for (args, 0..) |arg, i| new_binds[i] = .{ func.params[i], arg };
-    var func_env = try func.env.overwrite(new_binds[0..len]);
+    var func_env = try func.env.fork(new_binds[0..len]);
 
     // Eval body.
     std.debug.assert(func.body.len > 0);

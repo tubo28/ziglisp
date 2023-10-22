@@ -83,22 +83,17 @@ pub fn loadBuiltin() !EnvRef {
     std.debug.assert(spf_names.len == spf.len);
 
     // Bind symbol and symbol id
-    for (func_names, 100_000_000..) |name, sid|
-        try S.registerUnsafe(name, sid);
-    for (spf_names, 200_000_000..) |name, sid|
-        try S.registerUnsafe(name, sid);
-
-    // Bind symbol and function
-    var new_binds = std.ArrayList(struct { S.ID, ValueRef }).init(alloc);
-    defer new_binds.deinit();
-
-    for (100_000_000.., 0..func.len) |sid, i|
-        try new_binds.append(.{ sid, try new(Value, Value{ .b_func = i }) });
-    for (200_000_000.., 0..spf.len) |sid, i|
-        try new_binds.append(.{ sid, try new(Value, Value{ .b_spf = i }) });
-
     const ret = try Env.new();
-    return ret.overwrite(try new_binds.toOwnedSlice());
+    for (func_names, 100_000_000.., 0..) |name, sym_id, idx| {
+        try S.registerUnsafe(name, sym_id);
+        try ret.globalDef(sym_id, try new(Value, Value{ .b_func = idx }));
+    }
+    for (spf_names, 200_000_000.., 0..) |name, sym_id, idx| {
+        try S.registerUnsafe(name, sym_id);
+        try ret.globalDef(sym_id, try new(Value, Value{ .b_spf = idx }));
+    }
+
+    return ret;
 }
 
 // lambda and define
