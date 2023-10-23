@@ -19,12 +19,15 @@ const Token = @import("tokenize.zig").Token;
 const Builtin = @import("builtin.zig");
 
 pub fn evaluate(x: ValueRef, env: EnvRef) anyerror!EvalResult {
-    std.log.debug("evaluate: {s}", .{try C.toString(x)});
+    // std.log.debug("evaluate: {s}", .{try C.toString(x)});
     switch (x.*) {
         Value.number => return .{ x, env },
         Value.lambda, Value.b_func, Value.b_form, Value.macro => unreachable,
         Value.symbol => |sym| return if (env.get(sym)) |ent| .{ ent, env } else .{ x, env },
-        Value.lval => |lval| return .{ env.local_values[lval.nth], env },
+        Value.lval => |lval| {
+            std.log.debug("lval loaded: {s} = {any}", .{ S.getName(lval.name).?, try C.toString(env.local_values[lval.nth]) });
+            return .{ env.local_values[lval.nth], env };
+        },
         Value.cons => |cons| {
             if (x == C.empty()) {
                 std.log.err("cannot evaluate empty list", .{});
