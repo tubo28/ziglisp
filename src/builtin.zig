@@ -59,7 +59,7 @@ pub const func = [_]*const Function{
     Functions.modulo,
 };
 
-const spf_names = [_][]const u8{
+const form_names = [_][]const u8{
     "quote",
     "begin",
     "define",
@@ -68,7 +68,7 @@ const spf_names = [_][]const u8{
     "cond",
     "define-syntax",
 };
-pub const spf = [_]*const SpecialForm{
+pub const form = [_]*const SpecialForm{
     SpecialForms.quote,
     SpecialForms.begin,
     SpecialForms.define,
@@ -80,7 +80,7 @@ pub const spf = [_]*const SpecialForm{
 
 pub fn loadBuiltin() !EnvRef {
     std.debug.assert(func_names.len == func.len);
-    std.debug.assert(spf_names.len == spf.len);
+    std.debug.assert(form_names.len == form.len);
 
     // Bind symbol and symbol id
     const ret = try Env.new();
@@ -88,9 +88,9 @@ pub fn loadBuiltin() !EnvRef {
         try S.registerUnsafe(name, sym_id);
         try ret.globalDef(sym_id, try new(Value, Value{ .b_func = idx }));
     }
-    for (spf_names, 200_000_000.., 0..) |name, sym_id, idx| {
+    for (form_names, 200_000_000.., 0..) |name, sym_id, idx| {
         try S.registerUnsafe(name, sym_id);
-        try ret.globalDef(sym_id, try new(Value, Value{ .b_spf = idx }));
+        try ret.globalDef(sym_id, try new(Value, Value{ .b_form = idx }));
     }
 
     return ret;
@@ -155,6 +155,7 @@ const SpecialForms = struct {
         std.debug.assert(args.len >= 2);
         const params = args[0];
         const body = args[1];
+        // TODO: change params in body to lval
         // Convert ValueRefs to symbols
         var sym_params = b: {
             var tmp: [100]ValueRef = undefined;

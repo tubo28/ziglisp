@@ -19,11 +19,12 @@ const Token = @import("tokenize.zig").Token;
 const Builtin = @import("builtin.zig");
 
 pub fn evaluate(x: ValueRef, env: EnvRef) anyerror!EvalResult {
+    std.log.debug("evaluate: {s}", .{try C.toString(x)});
     switch (x.*) {
         Value.number => return .{ x, env },
-        Value.lambda, Value.b_func, Value.b_spf, Value.macro => unreachable,
+        Value.lambda, Value.b_func, Value.b_form, Value.macro => unreachable,
         Value.symbol => |sym| return if (env.get(sym)) |ent| .{ ent, env } else .{ x, env },
-        Value.binding => |b| return .{ b.ref, env },
+        Value.lval => |lval| return .{ env.local_values[lval.nth], env },
         Value.cons => |cons| {
             if (x == C.empty()) {
                 std.log.err("cannot evaluate empty list", .{});
@@ -193,8 +194,8 @@ fn matchPattern(name: SymbolID, pattern: ValueRef, input: ValueRef, map: *Symbol
 }
 
 const Callable = union(enum) {
-    bsf: *const Builtin.SpecialForm,
-    bfunc: *const Builtin.Function,
+    b_form: *const Builtin.SpecialForm,
+    b_func: *const Builtin.Function,
     lambda: *const Lambda,
 };
 
@@ -202,6 +203,11 @@ fn toCallable(car: *const C.Value, env: EnvRef) !Callable {
     if (car.* == .cons) {
         // example: ((lambda (x) (+ x x)) 1)
         const lmd, _ = try evaluate(car, env);
+        return Callable{ .lambda = lmd.lambda };
+    }
+
+    if (car.* == .lval) {
+        const lmd = env.local_values[car.lval.nth];
         return Callable{ .lambda = lmd.lambda };
     }
 
@@ -217,10 +223,6 @@ fn toCallable(car: *const C.Value, env: EnvRef) !Callable {
                 unreachable;
             }
         },
-        Value.binding => |b| {
-            name = b.symbol;
-            callable = b.ref;
-        },
         else => {
             std.log.err("not callable: {}", .{car.*});
             unreachable;
@@ -228,9 +230,10 @@ fn toCallable(car: *const C.Value, env: EnvRef) !Callable {
     }
 
     switch (callable.*) {
+        // TODO: log out what is calling and param.
         Value.lambda => |l| return Callable{ .lambda = l },
-        Value.b_func => |bf| return Callable{ .bfunc = Builtin.func[bf] },
-        Value.b_spf => |bs| return Callable{ .bsf = Builtin.spf[bs] },
+        Value.b_func => |bf| return Callable{ .b_func = Builtin.func[bf] },
+        Value.b_form => |bs| return Callable{ .b_form = Builtin.form[bs] },
         else => |other| {
             std.log.err("symbol `{s}` is bound to non-callable value: {any}", .{ S.getName(name).?, other });
             unreachable;
@@ -240,8 +243,10 @@ fn toCallable(car: *const C.Value, env: EnvRef) !Callable {
 
 fn call(callable: Callable, args: []ValueRef, env: EnvRef) anyerror!EvalResult {
     switch (callable) {
-        Callable.bsf => |form| return form(args, env),
-        Callable.bfunc => |func| {
+        Callable.b_form => |form| {
+            return form(args, env);
+        },
+        Callable.b_func => |func| {
             var to: [100]ValueRef = undefined;
             try evalAll(args, env, &to);
             return .{ try func(to[0..args.len]), env };

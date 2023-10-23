@@ -16,6 +16,7 @@ fn newMap() !*Map {
 
 pub const Env = struct {
     map: *const Map,
+    local_values: []ValueRef,
     caller: ?*const Env,
     global: *Map,
 
@@ -25,7 +26,8 @@ pub const Env = struct {
     pub fn new() !Env.Ref {
         var ret = try C.alloc.create(Self);
         const map = try newMap();
-        ret.* = Env{ .map = map, .caller = null, .global = map };
+        const empty = try C.alloc.alloc(ValueRef, 0);
+        ret.* = Env{ .map = map, .local_values = empty, .caller = null, .global = map };
         return ret;
     }
 
@@ -41,9 +43,13 @@ pub const Env = struct {
     pub fn fork(self: *const Self, kvs: []struct { SymbolID, ValueRef }) !Env.Ref {
         var m = try newMap();
         try m.ensureTotalCapacity(kvs.len);
-        for (kvs) |kv| try m.put(kv[0], kv[1]);
+        var lvals = try C.alloc.alloc(ValueRef, kvs.len);
+        for (kvs, 0..) |kv, i| {
+            try m.put(kv[0], kv[1]);
+            lvals[i] = kv[1];
+        }
         var ret = try C.alloc.create(Self);
-        ret.* = Env{ .map = m, .caller = self, .global = self.global };
+        ret.* = Env{ .map = m, .local_values = lvals, .caller = self, .global = self.global };
         return ret;
     }
 

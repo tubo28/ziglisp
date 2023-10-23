@@ -23,23 +23,24 @@ pub fn new(ty: anytype, x: ty) !*ty {
     return ret;
 }
 
-pub const ValueTag = enum { number, symbol, binding, cons, lambda, macro, b_func, b_spf };
+pub const ValueTag = enum { number, symbol, lval, cons, lambda, macro, b_func, b_form };
 /// Node of tree.
 /// It is a branch only if cons, otherwise leaf.
 pub const Value = union(ValueTag) {
     number: i64,
     symbol: SymbolID,
-    binding: *Binding,
+    lval: *const LocalVal,
     cons: *const Cons,
     lambda: *const Lambda,
     macro: *const Macro,
     b_func: usize, // Index of table
-    b_spf: usize,
+    b_form: usize,
 };
 
-const Binding = struct {
-    symbol: SymbolID,
-    ref: ValueRef,
+// Lambda param
+pub const LocalVal = struct {
+    name: SymbolID,
+    nth: usize,
 };
 
 pub fn newCons(car: ValueRef, cdr: ValueRef) !ValueRef {
@@ -131,9 +132,9 @@ pub fn deepEql(x: ValueRef, y: ValueRef) bool {
     switch (x.*) {
         Value.number => |x_| return x_ == y.number,
         Value.symbol => |x_| return x_ == y.symbol,
-        Value.binding => |x_| return deepEql(x_.ref, y.binding.ref),
+        Value.lval => unreachable,
         Value.b_func => |x_| return x_ == y.b_func,
-        Value.b_spf => |x_| return x_ == y.b_spf,
+        Value.b_form => |x_| return x_ == y.b_form,
         Value.cons => |x_| return deepEql(x_.car, y.cons.car) and deepEql(x_.cdr, y.cons.cdr),
         Value.macro => |x_| return x_.name == y.macro.name,
         Value.lambda => unreachable,
@@ -168,7 +169,7 @@ fn toStringInner(cell: ValueRef, builder: *std.ArrayList(u8)) anyerror!void {
             try builder.appendSlice(str);
         },
         Value.symbol => |sym| try builder.appendSlice(S.getName(sym).?),
-        Value.binding => |b| try builder.appendSlice(S.getName(b.symbol).?),
+        Value.lval => |lv| try builder.appendSlice(S.getName(lv.name).?),
         Value.lambda => try builder.appendSlice("<lambda>"),
         Value.macro => |macro| {
             try builder.appendSlice("<macro:");
@@ -176,7 +177,7 @@ fn toStringInner(cell: ValueRef, builder: *std.ArrayList(u8)) anyerror!void {
             try builder.appendSlice(">");
         },
         Value.b_func => try builder.appendSlice("<builtin function>"),
-        Value.b_spf => try builder.appendSlice("<builtin special form>"),
+        Value.b_form => try builder.appendSlice("<builtin special form>"),
     }
 }
 
