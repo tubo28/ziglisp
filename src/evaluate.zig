@@ -24,10 +24,6 @@ pub fn evaluate(x: ValueRef, env: EnvRef) anyerror!EvalResult {
         Value.number => return .{ x, env },
         Value.lambda, Value.b_func, Value.b_form, Value.macro => unreachable,
         Value.symbol => |sym| return if (env.get(sym)) |ent| .{ ent, env } else .{ x, env },
-        Value.lval => |lval| {
-            std.log.debug("lval loaded: {s} = {any}", .{ S.getName(lval.name).?, try C.toString(env.local_values[lval.nth]) });
-            return .{ env.local_values[lval.nth], env };
-        },
         Value.cons => |cons| {
             if (x == C.empty()) {
                 std.log.err("cannot evaluate empty list", .{});
@@ -206,11 +202,6 @@ fn toCallable(car: *const C.Value, env: EnvRef) !Callable {
     if (car.* == .cons) {
         // example: ((lambda (x) (+ x x)) 1)
         const lmd, _ = try evaluate(car, env);
-        return Callable{ .lambda = lmd.lambda };
-    }
-
-    if (car.* == .lval) {
-        const lmd = env.local_values[car.lval.nth];
         return Callable{ .lambda = lmd.lambda };
     }
 
