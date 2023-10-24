@@ -2,7 +2,7 @@ const std = @import("std");
 
 const C = @import("common.zig");
 
-pub const ID = usize;
+pub const ID = u32;
 
 var sid: ID = 0;
 var to_id: std.StringHashMap(ID) = undefined;
@@ -24,7 +24,9 @@ pub fn init() !void {
 pub fn getOrRegister(s: []const u8) !ID {
     std.debug.assert(sid != 0);
     if (to_id.get(s)) |id| return id;
-    sid += 100;
+    sid += 1;
+
+    std.log.debug("SymbolID {}: {s}", .{ sid, s });
     try to_id.put(s, sid);
     try to_str.put(sid, s);
     return sid;

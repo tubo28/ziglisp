@@ -6,13 +6,29 @@ const C = @import("common.zig");
 const ValueRef = C.ValueRef;
 const SymbolID = S.ID;
 
-const Map = std.AutoArrayHashMap(SymbolID, ValueRef);
+const Map = struct {
+    names: []SymbolID,
+    values: []ValueRef,
+    len: usize,
+    cap: usize,
 
-fn newMap() !*Map {
-    const ret = try C.alloc.create(Map);
-    ret.* = Map.init(C.alloc);
-    return ret;
-}
+    const Self = @This();
+
+    fn put(self: *Self, k: SymbolID, v: ValueRef) bool {
+        for (0..self.len) |i| if (self.names[i] == k) return false;
+
+        std.debug.assert(self.len != self.cap); // no capacity
+        self.names[self.len] = k;
+        self.values[self.len] = v;
+        self.len += 1;
+        return true;
+    }
+
+    fn get(self: *const Self, k: SymbolID) ?ValueRef {
+        for (self.names, self.values) |n, v| if (n == k) return v;
+        return null;
+    }
+};
 
 pub const Env = struct {
     map: *const Map,
@@ -22,47 +38,44 @@ pub const Env = struct {
     const Self = @This();
     pub const Ref = *const Self;
 
-    pub fn new() !Env.Ref {
-        var ret = try C.alloc.create(Self);
-        const map = try newMap();
+    pub fn new(names: []SymbolID, values: []ValueRef, len: usize) !Env.Ref {
+        std.debug.assert(names.len == values.len);
+        const cap = names.len;
+        var ret = try C.new(Self, undefined);
+        const map = try C.new(Map, Map{
+            .names = names,
+            .values = values,
+            .len = len,
+            .cap = cap,
+        });
         ret.* = Env{ .map = map, .caller = null, .global = map };
         return ret;
     }
 
-    pub fn globalDef(self: *const Self, k: SymbolID, v: ValueRef) !void {
-        const result = try self.global.getOrPut(k);
-        if (result.found_existing) {
+    pub fn globalDef(self: *const Self, k: SymbolID, v: ValueRef) void {
+        if (!self.global.put(k, v)) {
             std.log.err("redefine of {s}", .{S.getName(k).?});
             unreachable;
         }
-        result.value_ptr.* = v;
     }
 
-    pub fn fork(self: *const Self, kvs: []struct { SymbolID, ValueRef }) !Env.Ref {
-        var m = try newMap();
-        try m.ensureTotalCapacity(kvs.len);
-        for (kvs) |kv| {
-            try m.put(kv[0], kv[1]);
-        }
+    pub fn fork(self: *const Self, names: []SymbolID, values: []ValueRef, len: usize) !Env.Ref {
+        std.debug.assert(names.len == values.len);
+        const cap = names.len;
+        const map = try C.new(Map, Map{
+            .names = names,
+            .values = values,
+            .len = len,
+            .cap = cap,
+        });
         var ret = try C.alloc.create(Self);
-        ret.* = Env{ .map = m, .caller = self, .global = self.global };
+        ret.* = Env{ .map = map, .caller = self, .global = self.global };
         return ret;
     }
 
     pub fn get(self: *const Self, k: SymbolID) ?ValueRef {
-        const ret = self.getImpl(k);
-        if (ret) |r| @constCast(self.map).put(k, r) catch unreachable;
-        // count[ret[1]] += 1;
-        // c += 1;
-        // if (c % 1_000_000 == 0) {
-        //     std.log.err("{any}", .{count});
-        // }
-        return ret;
-    }
-
-    fn getImpl(self: *const Self, k: SymbolID) ?ValueRef {
         if (self.map.get(k)) |v| return v;
-        if (self.caller) |c| return c.getImpl(k);
+        if (self.caller) |c| return c.get(k);
         return self.global.get(k);
     }
 };

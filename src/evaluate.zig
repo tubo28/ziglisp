@@ -265,9 +265,13 @@ fn callLambda(lambda: *const Lambda, args: []ValueRef) anyerror!ValueRef {
     const len = lambda.params.len;
 
     // Names of lambda params overwrites caller's namespace (shadowing).
-    var new_binds: [100]struct { SymbolID, ValueRef } = undefined;
-    for (args, 0..) |arg, i| new_binds[i] = .{ lambda.params[i], arg };
-    var lambda_env = try lambda.env.fork(new_binds[0..len]);
+    var names: []SymbolID = try C.alloc.alloc(SymbolID, len);
+    var values: []ValueRef = try C.alloc.alloc(ValueRef, len);
+    for (0..len) |i| {
+        names[i] = lambda.params[i];
+        values[i] = args[i];
+    }
+    var lambda_env = try lambda.env.fork(names[0..len], values[0..len], len);
 
     // Eval body.
     // TODO: replace lambda arguments in body to pointer to param

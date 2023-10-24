@@ -83,17 +83,24 @@ pub fn loadBuiltin() !EnvRef {
     std.debug.assert(form_names.len == form.len);
 
     // Bind symbol and symbol id
-    const ret = try Env.new();
+    var names = try C.alloc.alloc(S.ID, 100);
+    var values = try C.alloc.alloc(ValueRef, 100);
+
+    var i: usize = 0;
     for (func_names, 100_000_000.., 0..) |name, sym_id, idx| {
-        try S.registerUnsafe(name, sym_id);
-        try ret.globalDef(sym_id, try new(Value, Value{ .b_func = idx }));
+        try S.registerUnsafe(name, @intCast(sym_id));
+        names[i] = @intCast(sym_id);
+        values[i] = try new(Value, Value{ .b_func = idx });
+        i += 1;
     }
     for (form_names, 200_000_000.., 0..) |name, sym_id, idx| {
-        try S.registerUnsafe(name, sym_id);
-        try ret.globalDef(sym_id, try new(Value, Value{ .b_form = idx }));
+        try S.registerUnsafe(name, @intCast(sym_id));
+        names[i] = @intCast(sym_id);
+        values[i] = try new(Value, Value{ .b_form = idx });
+        i += 1;
     }
 
-    return ret;
+    return try Env.new(names, values, i);
 }
 
 // lambda and define
@@ -117,7 +124,7 @@ const SpecialForms = struct {
         std.debug.assert(args.len == 2);
         const name = args[0].symbol;
         var bind_to: *Value = try C.new(Value, undefined);
-        try env.globalDef(name, bind_to);
+        env.globalDef(name, bind_to);
         const expr = args[1];
         const val, _ = try E.evaluate(expr, env); // Assume that RHS has no side-effect.
         bind_to.* = val.*;
@@ -194,7 +201,7 @@ const SpecialForms = struct {
             .rules = try parseRules(lst[1]),
         });
         const macro = try new(Value, Value{ .macro = m });
-        try env.globalDef(name, macro);
+        env.globalDef(name, macro);
         return .{ macro, env };
     }
 };
