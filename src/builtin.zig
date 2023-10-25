@@ -15,8 +15,6 @@ const new = C.new;
 const t = C.t;
 const Value = C.Value;
 const ValueRef = C.ValueRef;
-const Macro = C.Macro;
-const MacroRule = C.MacroRule;
 
 const Env = @import("env.zig").Env;
 const EnvRef = Env.Ref;
@@ -66,7 +64,6 @@ const form_names = [_][]const u8{
     "lambda",
     "if",
     "cond",
-    "define-syntax",
 };
 pub const form = [_]*const SpecialForm{
     SpecialForms.quote,
@@ -75,7 +72,6 @@ pub const form = [_]*const SpecialForm{
     SpecialForms.lambda,
     SpecialForms.if_,
     SpecialForms.cond,
-    SpecialForms.defineSyntax,
 };
 
 pub fn loadBuiltin() !EnvRef {
@@ -180,30 +176,6 @@ const SpecialForms = struct {
         });
         return .{ func_val, env };
     }
-
-    // (define-syntax id expr)
-    // (syntax-rules (literal-id ...)
-    //   ((id pattern) template) ...)
-
-    // (define-syntax if
-    //   (syntax-rules ()
-    //     ((_ test then else)
-    //      (cond (test then)
-    //            (else else)))))
-    // (define-syntax incf
-    //   (syntax-rules ()
-    //     ((_ x) (begin (set! x (+ x 1)) x))
-    //     ((_ x i) (begin (set! x (+ x i)) x))))
-    fn defineSyntax(lst: []ValueRef, env: EnvRef) anyerror!EvalResult {
-        const name = lst[0].symbol;
-        const m = try new(Macro, Macro{
-            .name = name,
-            .rules = try parseRules(lst[1]),
-        });
-        const macro = try new(Value, Value{ .macro = m });
-        env.globalDef(name, macro);
-        return .{ macro, env };
-    }
 };
 
 const Functions = struct {
@@ -296,19 +268,4 @@ fn toBool(x: ValueRef) bool {
 
 fn isF(x: ValueRef) bool {
     return x == f();
-}
-
-fn parseRules(lst: ValueRef) ![]MacroRule {
-    const syntax_rules = try S.getOrRegister("syntax-rules");
-
-    std.debug.assert(_car(lst).symbol == syntax_rules);
-    std.debug.assert(_cadr(lst) == C.empty()); // TODO
-
-    var tmp: [100]ValueRef = undefined;
-    const rules = C.toArrayListUnmanaged(_cddr(lst), &tmp);
-
-    var ret = try alloc.alloc(MacroRule, rules.items.len);
-    for (rules.items, 0..) |r, i|
-        ret[i] = MacroRule{ .pattern = _car(r), .template = _cadr(r) };
-    return ret;
 }

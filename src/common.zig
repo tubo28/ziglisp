@@ -23,7 +23,7 @@ pub fn new(ty: anytype, x: ty) !*ty {
     return ret;
 }
 
-pub const ValueTag = enum { number, symbol, cons, lambda, macro, b_func, b_form };
+pub const ValueTag = enum { number, symbol, cons, lambda, b_func, b_form };
 /// Node of tree.
 /// It is a branch only if cons, otherwise leaf.
 pub const Value = union(ValueTag) {
@@ -31,7 +31,6 @@ pub const Value = union(ValueTag) {
     symbol: SymbolID,
     cons: *const Cons,
     lambda: *const Lambda,
-    macro: *const Macro,
     b_func: usize, // Index of table
     b_form: usize,
 };
@@ -134,7 +133,6 @@ pub fn deepEql(x: ValueRef, y: ValueRef) bool {
         Value.b_func => |x_| return x_ == y.b_func,
         Value.b_form => |x_| return x_ == y.b_form,
         Value.cons => |x_| return deepEql(x_.car, y.cons.car) and deepEql(x_.cdr, y.cons.cdr),
-        Value.macro => |x_| return x_.name == y.macro.name,
         Value.lambda => unreachable,
     }
 }
@@ -168,11 +166,6 @@ fn toStringInner(cell: ValueRef, builder: *std.ArrayList(u8)) anyerror!void {
         },
         Value.symbol => |sym| try builder.appendSlice(S.getName(sym).?),
         Value.lambda => try builder.appendSlice("<lambda>"),
-        Value.macro => |macro| {
-            try builder.appendSlice("<macro:");
-            try builder.appendSlice(S.getName(macro.name).?);
-            try builder.appendSlice(">");
-        },
         Value.b_func => try builder.appendSlice("<builtin function>"),
         Value.b_form => try builder.appendSlice("<builtin special form>"),
     }
@@ -222,13 +215,3 @@ pub fn _cddr(x: ValueRef) ValueRef {
 pub fn _cadr(x: ValueRef) ValueRef {
     return _cdr(x).cons.car;
 }
-
-pub const Macro = struct {
-    name: S.ID,
-    rules: []MacroRule,
-};
-
-pub const MacroRule = struct {
-    pattern: ValueRef, // Consists only of cons or symbol
-    template: ValueRef,
-};
