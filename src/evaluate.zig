@@ -199,32 +199,27 @@ const Callable = union(enum) {
 };
 
 fn toCallable(car: *const C.Value, env: EnvRef) !Callable {
+    if (car.* != .cons and car.* != .symbol) {
+        std.log.err("not callable: {}", .{car.*});
+        unreachable;
+    }
+
     if (car.* == .cons) {
         // example: ((lambda (x) (+ x x)) 1)
         const lmd, _ = try evaluate(car, env);
         return Callable{ .lambda = lmd.lambda };
     }
 
-    var callable: ValueRef = undefined;
-    var name: SymbolID = undefined;
-    switch (car.*) {
-        Value.symbol => |s| {
-            if (env.get(s)) |v| {
-                name = s;
-                callable = v;
-            } else {
-                std.log.err("not callable: {}", .{car.*});
-                unreachable;
-            }
-        },
-        else => {
-            std.log.err("not callable: {}", .{car.*});
-            unreachable;
-        },
+    const name = car.symbol;
+
+    if (env.get(name) == null) {
+        std.log.err("not callable value: {s} {}", .{ S.getName(name).?, car.* });
+        unreachable;
     }
 
+    const callable = env.get(name).?;
+
     switch (callable.*) {
-        // TODO: log out what is calling and param.
         Value.lambda => |l| return Callable{ .lambda = l },
         Value.b_func => |bf| return Callable{ .b_func = Builtin.func[bf] },
         Value.b_form => |bs| return Callable{ .b_form = Builtin.form[bs] },
