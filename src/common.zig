@@ -52,7 +52,7 @@ pub fn newCons(car: ValueRef, cdr: ValueRef) !ValueRef {
 pub const Lambda = struct {
     params: []SymbolID,
     body: ValueRef,
-    env: EnvRef, // captured env (lexical scope)
+    closure: EnvRef, // captured env (lexical scope)
     // TODO: Add table for function argument to make beta reduction faster
 };
 

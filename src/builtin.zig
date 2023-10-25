@@ -175,7 +175,7 @@ const SpecialForms = struct {
             .lambda = try new(C.Lambda, C.Lambda{
                 .params = sym_params,
                 .body = body,
-                .env = env, // capture env
+                .closure = env, // capture env
             }),
         });
         return .{ func_val, env };

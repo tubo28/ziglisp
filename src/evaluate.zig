@@ -262,16 +262,7 @@ fn evalAll(xs: []ValueRef, env: EnvRef, to: []ValueRef) !void {
 
 fn callLambda(lambda: *const Lambda, args: []ValueRef) anyerror!ValueRef {
     std.debug.assert(args.len == lambda.params.len);
-    const len = lambda.params.len;
-
-    // Names of lambda params overwrites caller's namespace (shadowing).
-    var names: []SymbolID = try C.alloc.alloc(SymbolID, len);
-    var values: []ValueRef = try C.alloc.alloc(ValueRef, len);
-    for (0..len) |i| {
-        names[i] = lambda.params[i];
-        values[i] = args[i];
-    }
-    var lambda_env = try lambda.env.fork(names[0..len], values[0..len], len);
+    var lambda_env = try lambda.closure.fork(lambda.params, args, args.len);
 
     // Eval body.
     // TODO: replace lambda arguments in body to pointer to param
