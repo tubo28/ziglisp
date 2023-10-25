@@ -49,7 +49,8 @@ pub fn newCons(car: ValueRef, cdr: ValueRef) !ValueRef {
 }
 
 pub const Lambda = struct {
-    params: []SymbolID,
+    params: ValueRef, // symbols
+    arity: usize,
     body: ValueRef,
     closure: EnvRef, // captured env (lexical scope)
     // TODO: Add table for function argument to make beta reduction faster
@@ -61,7 +62,7 @@ pub fn empty() ValueRef {
 }
 
 pub fn init() !void {
-    var e = try alloc.create(Value);
+    var e = try new(Value, undefined);
     empty_cons_opt = try new(Cons, Cons{ .car = e, .cdr = e });
     e.* = Value{ .cons = empty_cons_opt.? };
     empty_opt = e;
@@ -71,8 +72,7 @@ pub fn init() !void {
 }
 
 fn initSpecialSymbol(sym: []const u8, dst: *?*Value) !void {
-    var ptr = try alloc.create(Value);
-    ptr.* = Value{ .symbol = try S.getOrRegister(sym) };
+    var ptr = try new(Value, Value{ .symbol = try S.getOrRegister(sym) });
     dst.* = ptr;
 }
 
@@ -105,7 +105,7 @@ pub fn t() ValueRef {
 }
 
 /// Convert sequence of cons cell like (foo bar buz) to ArrayListUnmanaged(ValueRef).
-pub fn toArrayListUnmanaged(cons_list: ValueRef, buf: []ValueRef) std.ArrayListUnmanaged(ValueRef) {
+pub fn flattenToALU(cons_list: ValueRef, buf: []ValueRef) std.ArrayListUnmanaged(ValueRef) {
     var list = std.ArrayListUnmanaged(ValueRef).fromOwnedSlice(buf);
     list.items.len = 0;
     var h = cons_list;
@@ -116,6 +116,25 @@ pub fn toArrayListUnmanaged(cons_list: ValueRef, buf: []ValueRef) std.ArrayListU
         h = _cdr(h);
     }
     return list;
+}
+
+/// Convert sequence of cons cell like (foo bar buz) to ArrayListUnmanaged(ValueRef).
+pub fn flatten(cons_list: ValueRef, buf: []ValueRef) usize {
+    var h = cons_list;
+    var i: usize = 0;
+    while (h != empty()) {
+        std.debug.assert(h.* == .cons); // is cons?
+        buf[i] = _car(h);
+        i += 1;
+        h = _cdr(h);
+    }
+    return i;
+}
+
+pub fn listLength(cons_list: ValueRef) usize {
+    std.debug.assert(cons_list.* == .cons);
+    if (cons_list == empty()) return 0;
+    return 1 + listLength(_cdr(cons_list));
 }
 
 pub fn toConsList(list: []ValueRef) !ValueRef {
@@ -214,4 +233,8 @@ pub fn _cddr(x: ValueRef) ValueRef {
 
 pub fn _cadr(x: ValueRef) ValueRef {
     return _cdr(x).cons.car;
+}
+
+pub fn _caddr(x: ValueRef) ValueRef {
+    return _cddr(x).cons.car;
 }

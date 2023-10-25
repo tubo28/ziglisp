@@ -15,7 +15,7 @@ const Map = struct {
     const Self = @This();
 
     fn put(self: *Self, k: SymbolID, v: ValueRef) bool {
-        for (0..self.len) |i| if (self.names[i] == k) return false;
+        for (self.names) |n| if (n == k) return false;
 
         std.debug.assert(self.len != self.cap); // no capacity
         self.names[self.len] = k;
@@ -59,18 +59,26 @@ pub const Env = struct {
         }
     }
 
-    pub fn fork(self: *const Self, names: []SymbolID, values: []ValueRef, len: usize) !Env.Ref {
-        std.debug.assert(names.len == values.len);
-        const cap = names.len;
+    pub fn fork(self: *const Self, names: ValueRef, values: ValueRef, len: usize) !Env.Ref {
+        std.debug.assert(C.listLength(names) == len);
+        std.debug.assert(C.listLength(values) == len);
+        var names_var_slice: [100]ValueRef = undefined;
+        const nl = C.flatten(names, &names_var_slice);
+        std.debug.assert(nl == len);
+        var names_slice = try C.alloc.alloc(SymbolID, len);
+        for (0..len) |i| names_slice[i] = names_var_slice[i].symbol;
+
+        var values_slice = try C.alloc.alloc(ValueRef, len);
+        const nv = C.flatten(values, values_slice);
+        std.debug.assert(nv == len);
+
         const map = try C.new(Map, Map{
-            .names = names,
-            .values = values,
+            .names = names_slice,
+            .values = values_slice,
             .len = len,
-            .cap = cap,
+            .cap = len,
         });
-        var ret = try C.alloc.create(Self);
-        ret.* = Env{ .map = map, .caller = self, .global = self.global };
-        return ret;
+        return try C.new(Self, Env{ .map = map, .caller = self, .global = self.global });
     }
 
     pub fn get(self: *const Self, k: SymbolID) ?ValueRef {

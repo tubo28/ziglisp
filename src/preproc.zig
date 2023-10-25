@@ -94,7 +94,7 @@ fn step3(tree: ValueRef) !ValueRef {
     const expr = caddr;
 
     var buf: [100]ValueRef = undefined;
-    const kvs_slice = C.toArrayListUnmanaged(kvs, &buf);
+    const kvs_slice = C.flattenToALU(kvs, &buf);
 
     const len = kvs_slice.items.len;
 

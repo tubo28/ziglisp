@@ -29,11 +29,10 @@ pub fn evaluate(x: ValueRef, env: EnvRef) anyerror!EvalResult {
 
             // Call something
             const c = try toCallable(cons.car, env);
-            var buf: [100]ValueRef = undefined;
-            const args = C.toArrayListUnmanaged(cons.cdr, &buf);
 
-            std.log.debug("call {s}", .{try C.toString(cons.car)});
-            return call(c, args.items, env);
+            // std.log.debug("call {s}", .{try C.toString(cons.car)});
+            // std.log.debug("  with args {s}", .{try C.toString(cons.cdr)});
+            return call(c, cons.cdr, env);
         },
     }
 }
@@ -83,34 +82,32 @@ fn toCallable(car: *const C.Value, env: EnvRef) !Callable {
     }
 }
 
-fn call(callable: Callable, args: []ValueRef, env: EnvRef) anyerror!EvalResult {
+fn call(callable: Callable, args: ValueRef, env: EnvRef) anyerror!EvalResult {
     switch (callable) {
         Callable.b_form => |form| {
             return form(args, env);
         },
         Callable.b_func => |func| {
-            var to = try C.alloc.alloc(ValueRef, args.len);
-            try evalAll(args, env, to);
-            return .{ try func(to), env };
+            return .{ try func(try evalAll(args, env)), env };
         },
         Callable.lambda => |lambda| {
-            var to = try C.alloc.alloc(ValueRef, args.len);
-            try evalAll(args, env, to);
-            return .{ try callLambda(lambda, to), env };
+            return .{ try callLambda(lambda, try evalAll(args, env)), env };
         },
     }
 }
 
-fn evalAll(xs: []ValueRef, env: EnvRef, to: []ValueRef) !void {
-    for (xs, 0..) |x, i| {
-        const ret, _ = try evaluate(x, env);
-        to[i] = ret;
-    }
+fn evalAll(xs: ValueRef, env: EnvRef) !ValueRef {
+    std.debug.assert(xs.* == .cons);
+    if (xs == C.empty()) return xs;
+    const car, _ = try evaluate(xs.cons.car, env);
+    const cdr = try evalAll(xs.cons.cdr, env);
+    return try C.newCons(car, cdr);
 }
 
-fn callLambda(lambda: *const Lambda, args: []ValueRef) anyerror!ValueRef {
-    std.debug.assert(args.len == lambda.params.len);
-    var lambda_env = try lambda.closure.fork(lambda.params, args, args.len);
+fn callLambda(lambda: *const Lambda, args: ValueRef) anyerror!ValueRef {
+    const len = C.listLength(args);
+    std.debug.assert(len == lambda.arity);
+    var lambda_env = try lambda.closure.fork(lambda.params, args, lambda.arity);
     const ret, _ = try evaluate(lambda.body, lambda_env);
     return ret;
 }

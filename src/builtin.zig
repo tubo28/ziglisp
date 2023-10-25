@@ -4,10 +4,11 @@ const C = @import("common.zig");
 const E = @import("evaluate.zig");
 const S = @import("symbol.zig");
 
-const _cadr = C._cadr;
 const _car = C._car;
 const _cdr = C._cdr;
+const _cadr = C._cadr;
 const _cddr = C._cddr;
+const _caddr = C._caddr;
 const alloc = C.alloc;
 const EvalResult = C.EvalResult;
 const f = C.f;
@@ -19,8 +20,8 @@ const ValueRef = C.ValueRef;
 const Env = @import("env.zig").Env;
 const EnvRef = Env.Ref;
 
-pub const Function = fn ([]ValueRef) anyerror!ValueRef;
-pub const SpecialForm = fn ([]ValueRef, EnvRef) anyerror!EvalResult;
+pub const Function = fn (ValueRef) anyerror!ValueRef;
+pub const SpecialForm = fn (ValueRef, EnvRef) anyerror!EvalResult;
 
 const func_names = [_][]const u8{
     "car",
@@ -101,44 +102,46 @@ pub fn loadBuiltin() !EnvRef {
 
 // lambda and define
 const SpecialForms = struct {
-    fn quote(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
-        return .{ args[0], env };
+    fn quote(list: ValueRef, env: EnvRef) anyerror!EvalResult {
+        return .{ _car(list), env };
     }
 
     // Define function or value
-    fn define(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
-        std.debug.assert(args.len > 0);
-        switch (args[0].*) {
-            Value.symbol => return defineV(args, env),
+    fn define(list: ValueRef, env: EnvRef) anyerror!EvalResult {
+        std.debug.assert(C.listLength(list) > 0);
+        switch (_car(list).*) {
+            Value.symbol => return defineV(list, env),
             else => unreachable,
         }
     }
 
     // (define name body)
     // defineV is the only way to modify the global env.
-    fn defineV(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
-        std.debug.assert(args.len == 2);
-        const name = args[0].symbol;
+    fn defineV(list: ValueRef, env: EnvRef) anyerror!EvalResult {
+        std.debug.assert(C.listLength(list) == 2);
+        const name = _car(list).symbol;
         var bind_to: *Value = try C.new(Value, undefined);
         env.globalDef(name, bind_to);
-        const expr = args[1];
+        const expr = _cadr(list);
         const val, _ = try E.evaluate(expr, env); // Assume that RHS has no side-effect.
         bind_to.* = val.*;
         return .{ val, env };
     }
 
-    fn if_(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
-        const pred = args[0];
-        const then = args[1];
-        const unless = if (args.len >= 3) args[2] else null;
+    fn if_(list: ValueRef, env: EnvRef) anyerror!EvalResult {
+        const pred = _car(list);
+        const then = _cadr(list);
         const p, _ = try E.evaluate(pred, env);
         if (toBool(p)) return try E.evaluate(then, env);
+        const unless = if (C.listLength(list) >= 3) _caddr(list) else null;
         if (unless) |u| return try E.evaluate(u, env);
         return .{ C.empty(), env }; // Return empty if pred is false and unless is not given.
     }
 
-    fn cond(clauses: []ValueRef, env: EnvRef) anyerror!EvalResult {
-        for (clauses) |cl| {
+    fn cond(clauses: ValueRef, env: EnvRef) anyerror!EvalResult {
+        var buf: [100]ValueRef = undefined;
+        const slice = C.flattenToALU(clauses, &buf);
+        for (slice.items) |cl| {
             const pred = _car(cl);
             const p, _ = try E.evaluate(pred, env);
             if (toBool(p)) return E.evaluate(_cadr(cl), env);
@@ -146,30 +149,26 @@ const SpecialForms = struct {
         return .{ C.empty(), env }; // Return empty if all pred is false.
     }
 
-    fn begin(exprs: []ValueRef, env: EnvRef) anyerror!EvalResult {
+    fn begin(exprs: ValueRef, env: EnvRef) anyerror!EvalResult {
         var ret = C.empty();
-        for (exprs) |expr| ret, _ = try E.evaluate(expr, env);
+        var buf: [100]ValueRef = undefined;
+        const slice = C.flattenToALU(exprs, &buf);
+        for (slice.items) |expr| ret, _ = try E.evaluate(expr, env);
         return .{ ret, env }; // return the last result
     }
 
     // (lambda (x y) (+ x y))
     // Lambda captures outer env (lexical scope).
-    fn lambda(args: []ValueRef, env: EnvRef) anyerror!EvalResult {
-        std.debug.assert(args.len >= 2);
-        const params = args[0];
-        const body = args[1];
-        // TODO: change params in body to lval
-        // Convert ValueRefs to symbols
-        var sym_params = b: {
-            var tmp: [100]ValueRef = undefined;
-            const val_params = C.toArrayListUnmanaged(params, &tmp);
-            var ret = try alloc.alloc(S.ID, val_params.items.len);
-            for (val_params.items, 0..) |a, i| ret[i] = a.symbol;
-            break :b ret;
-        };
+    fn lambda(list: ValueRef, env: EnvRef) anyerror!EvalResult {
+        std.debug.assert(C.listLength(list) >= 2);
+        const params = _car(list);
+        const arity = C.listLength(params);
+        const body = _cadr(list);
+
         const func_val = try C.new(Value, Value{
             .lambda = try new(C.Lambda, C.Lambda{
-                .params = sym_params,
+                .params = params,
+                .arity = arity,
                 .body = body,
                 .closure = env, // capture env
             }),
@@ -179,82 +178,93 @@ const SpecialForms = struct {
 };
 
 const Functions = struct {
-    fn car(args: []ValueRef) anyerror!ValueRef {
-        return _car(args[0]);
+    fn car(xs: ValueRef) anyerror!ValueRef {
+        std.debug.assert(C.listLength(xs) == 1);
+        return _car(_car(xs));
     }
 
-    fn cdr(args: []ValueRef) anyerror!ValueRef {
-        return _cdr(args[0]);
+    fn cdr(xs: ValueRef) anyerror!ValueRef {
+        std.debug.assert(C.listLength(xs) == 1);
+        return _cdr(_car(xs));
     }
 
-    fn cons_(args: []ValueRef) anyerror!ValueRef {
-        return C.newCons(args[0], args[1]);
+    fn cons_(xs: ValueRef) anyerror!ValueRef {
+        std.debug.assert(C.listLength(xs) == 2);
+        return C.newCons(_car(xs), _cadr(xs));
     }
 
-    fn list(xs: []ValueRef) anyerror!ValueRef {
-        if (xs.len == 0) return C.empty();
-        return C.newCons(xs[0], try list(xs[1..]));
+    fn list(xs: ValueRef) anyerror!ValueRef {
+        return xs;
     }
 
-    fn add(xs: []ValueRef) anyerror!ValueRef {
+    fn add(xs: ValueRef) anyerror!ValueRef {
+        var buf: [100]ValueRef = undefined;
+        const slice = C.flattenToALU(xs, &buf);
         var ret: i64 = 0;
-        for (xs) |x| ret += x.number;
+        for (slice.items) |x| ret += x.number;
         return C.new(Value, Value{ .number = ret });
     }
 
-    fn sub(xs: []ValueRef) anyerror!ValueRef {
+    fn sub(xs: ValueRef) anyerror!ValueRef {
+        var buf: [100]ValueRef = undefined;
+        const slice = C.flattenToALU(xs, &buf);
         var ret: i64 = 0;
-        for (xs, 0..) |x, i| ret += if (i == 0) x.number else -x.number;
+        for (slice.items, 0..) |x, i| ret += if (i == 0) x.number else -x.number;
         return C.new(Value, Value{ .number = ret });
     }
 
-    fn mul(xs: []ValueRef) anyerror!ValueRef {
+    fn mul(xs: ValueRef) anyerror!ValueRef {
+        var buf: [100]ValueRef = undefined;
+        const slice = C.flattenToALU(xs, &buf);
         var ret: i64 = 1;
-        for (xs) |x| ret *= x.number;
+        for (slice.items) |x| ret *= x.number;
         return C.new(Value, Value{ .number = ret });
     }
 
-    fn quotient(xs: []ValueRef) anyerror!ValueRef {
-        const ret = @divFloor(xs[0].number, xs[1].number);
+    fn quotient(xs: ValueRef) anyerror!ValueRef {
+        const ret = @divFloor(_car(xs).number, _cadr(xs).number);
         return C.new(Value, Value{ .number = ret });
     }
 
-    fn modulo(xs: []ValueRef) anyerror!ValueRef {
-        const ret = @mod(xs[0].number, xs[1].number);
+    fn modulo(xs: ValueRef) anyerror!ValueRef {
+        const ret = @mod(_car(xs).number, _cadr(xs).number);
         return C.new(Value, Value{ .number = ret });
     }
 
-    fn or_(xs: []ValueRef) anyerror!ValueRef {
-        for (xs) |x| if (toBool(x)) return t();
+    fn or_(xs: ValueRef) anyerror!ValueRef {
+        var buf: [100]ValueRef = undefined;
+        const slice = C.flattenToALU(xs, &buf);
+        for (slice.items) |x| if (toBool(x)) return t();
         return f();
     }
 
-    fn and_(xs: []ValueRef) anyerror!ValueRef {
-        for (xs) |x| if (!toBool(x)) return f();
+    fn and_(xs: ValueRef) anyerror!ValueRef {
+        var buf: [100]ValueRef = undefined;
+        const slice = C.flattenToALU(xs, &buf);
+        for (slice.items) |x| if (!toBool(x)) return f();
         return t();
     }
 
-    fn eq(xs: []ValueRef) anyerror!ValueRef {
-        if (C.deepEql(xs[0], xs[1])) return t();
+    fn eq(xs: ValueRef) anyerror!ValueRef {
+        if (C.deepEql(_car(xs), _cadr(xs))) return t();
         return f();
     }
 
-    fn le(xs: []ValueRef) anyerror!ValueRef {
-        return toValue(xs[0].number < xs[1].number);
+    fn le(xs: ValueRef) anyerror!ValueRef {
+        return toValue(_car(xs).number < _cadr(xs).number);
     }
 
-    fn null_(xs: []ValueRef) anyerror!ValueRef {
-        return toValue(xs[0] == C.empty());
+    fn null_(xs: ValueRef) anyerror!ValueRef {
+        return toValue(_car(xs) == C.empty());
     }
 
-    fn print(xs: []ValueRef) !ValueRef {
-        if (xs.len == 0) return C.empty();
-        for (xs) |x| {
-            const str = try C.toString(x);
-            const stdout = std.io.getStdOut().writer();
-            nosuspend try stdout.print("#print: {s}\n", .{str});
-        }
-        return xs[xs.len - 1];
+    fn print(xs: ValueRef) !ValueRef {
+        if (xs == C.empty()) return C.empty();
+        const str = try C.toString(_car(xs));
+        const stdout = std.io.getStdOut().writer();
+        nosuspend try stdout.print("#print: {s}\n", .{str});
+        if (_cdr(xs) == C.empty()) return _car(xs);
+        return print(_cdr(xs));
     }
 };
 
