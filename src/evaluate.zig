@@ -89,14 +89,14 @@ fn call(callable: Callable, args: []ValueRef, env: EnvRef) anyerror!EvalResult {
             return form(args, env);
         },
         Callable.b_func => |func| {
-            var to: [100]ValueRef = undefined;
-            try evalAll(args, env, &to);
-            return .{ try func(to[0..args.len]), env };
+            var to = try C.alloc.alloc(ValueRef, args.len);
+            try evalAll(args, env, to);
+            return .{ try func(to), env };
         },
         Callable.lambda => |lambda| {
-            var to: [100]ValueRef = undefined;
-            try evalAll(args, env, &to);
-            return .{ try callLambda(lambda, to[0..args.len]), env };
+            var to = try C.alloc.alloc(ValueRef, args.len);
+            try evalAll(args, env, to);
+            return .{ try callLambda(lambda, to), env };
         },
     }
 }
@@ -111,9 +111,6 @@ fn evalAll(xs: []ValueRef, env: EnvRef, to: []ValueRef) !void {
 fn callLambda(lambda: *const Lambda, args: []ValueRef) anyerror!ValueRef {
     std.debug.assert(args.len == lambda.params.len);
     var lambda_env = try lambda.closure.fork(lambda.params, args, args.len);
-
-    // Eval body.
-    // TODO: replace lambda arguments in body to pointer to param
     const ret, _ = try evaluate(lambda.body, lambda_env);
     return ret;
 }
