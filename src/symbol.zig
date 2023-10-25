@@ -26,7 +26,7 @@ pub fn getOrRegister(s: []const u8) !ID {
     if (to_id.get(s)) |id| return id;
     sid += 1;
 
-    std.log.debug("SymbolID {}: {s}", .{ sid, s });
+    std.log.debug("register symbol {}: {s}", .{ sid, s });
     try to_id.put(s, sid);
     try to_str.put(sid, s);
     return sid;

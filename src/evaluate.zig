@@ -31,6 +31,8 @@ pub fn evaluate(x: ValueRef, env: EnvRef) anyerror!EvalResult {
             const c = try toCallable(cons.car, env);
             var buf: [100]ValueRef = undefined;
             const args = C.toArrayListUnmanaged(cons.cdr, &buf);
+
+            std.log.debug("call {s}", .{try C.toString(cons.car)});
             return call(c, args.items, env);
         },
     }
