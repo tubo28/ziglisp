@@ -18,6 +18,7 @@ pub const Cons = struct {
 };
 
 pub fn new(ty: anytype, x: ty) !*ty {
+    std.log.debug("{}\t{}", .{ @sizeOf(ty), ty });
     var ret: *ty = try alloc.create(ty);
     ret.* = x;
     return ret;
@@ -29,7 +30,7 @@ pub const ValueTag = enum { number, symbol, cons, lambda, b_func, b_form };
 pub const Value = union(ValueTag) {
     number: i64,
     symbol: SymbolID,
-    cons: *const Cons,
+    cons: Cons,
     lambda: *const Lambda,
     b_func: usize, // Index of table
     b_form: usize,
@@ -44,7 +45,7 @@ pub const LocalVal = struct {
 pub fn newCons(car: ValueRef, cdr: ValueRef) !ValueRef {
     return new(
         Value,
-        Value{ .cons = try new(Cons, Cons{ .car = car, .cdr = cdr }) },
+        Value{ .cons = Cons{ .car = car, .cdr = cdr } },
     );
 }
 
@@ -62,9 +63,8 @@ pub fn empty() ValueRef {
 }
 
 pub fn init() !void {
-    var e = try new(Value, undefined);
-    empty_cons_opt = try new(Cons, Cons{ .car = e, .cdr = e });
-    e.* = Value{ .cons = empty_cons_opt.? };
+    var e = try new(Value, Value{ .cons = undefined });
+    e.cons = Cons{ .car = e, .cdr = e };
     empty_opt = e;
 
     try initSpecialSymbol("#t", &t_opt);
@@ -76,17 +76,9 @@ fn initSpecialSymbol(sym: []const u8, dst: *?*Value) !void {
     dst.* = ptr;
 }
 
-fn emptyCons() *const Cons {
-    _ = empty();
-    return empty_cons_opt.?;
-}
-
-// var quote_opt: ?*Value = null;
 var f_opt: ?*Value = null;
 var t_opt: ?*Value = null;
-
 var empty_opt: ?*Value = null;
-var empty_cons_opt: ?*Cons = null;
 
 // pub fn quote() ValueRef {
 //     return quote_opt.?;
@@ -190,12 +182,12 @@ fn toStringInner(cell: ValueRef, builder: *std.ArrayList(u8)) anyerror!void {
     }
 }
 
-fn consToString(x: *const Cons, builder: *std.ArrayList(u8)) !void {
+fn consToString(x: Cons, builder: *std.ArrayList(u8)) !void {
     switch (x.cdr.*) {
         Value.cons => |next| {
             // List
             try toStringInner(x.car, builder);
-            if (next == emptyCons()) return;
+            if (x.cdr == empty()) return;
             try builder.append(' ');
             try consToString(next, builder);
         },
