@@ -105,9 +105,7 @@ fn evalAll(xs: ValueRef, env: EnvRef) !ValueRef {
 }
 
 fn callLambda(lambda: *const Lambda, args: ValueRef) anyerror!ValueRef {
-    const len = C.listLength(args);
-    std.debug.assert(len == lambda.arity);
-    var lambda_env = try lambda.closure.fork(lambda.params, args, lambda.arity);
+    var lambda_env = try lambda.closure.fork(lambda.params, args);
     const ret, _ = try evaluate(lambda.body, lambda_env);
     return ret;
 }

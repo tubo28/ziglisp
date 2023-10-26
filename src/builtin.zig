@@ -160,13 +160,11 @@ const SpecialForms = struct {
     fn lambda(list: ValueRef, env: EnvRef) anyerror!EvalResult {
         std.debug.assert(C.listLength(list) >= 2);
         const params = _car(list);
-        const arity = C.listLength(params);
         const body = _cadr(list);
 
         const func_val = try C.new(Value, Value{
             .lambda = try new(C.Lambda, C.Lambda{
                 .params = params,
-                .arity = arity,
                 .body = body,
                 .closure = env, // capture env
             }),

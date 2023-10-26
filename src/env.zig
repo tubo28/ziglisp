@@ -14,11 +14,6 @@ const Map = struct {
     const Self = @This();
 
     fn put(self: *Self, k: SymbolID, v: ValueRef) !bool {
-        var n = self.names;
-        while (n != C.empty()) {
-            if (C._car(n).symbol == k) return false;
-            n = C._cdr(n);
-        }
         self.names = try C.newCons(try C.new(Value, Value{ .symbol = k }), self.names);
         self.values = try C.newCons(v, self.values);
         return true;
@@ -46,26 +41,19 @@ pub const Env = struct {
 
     pub fn new(names: ValueRef, values: ValueRef) !Env.Ref {
         std.debug.assert(C.listLength(names) == C.listLength(values));
-        var ret = try C.new(Self, undefined);
         const map = try C.new(Map, Map{
             .names = names,
             .values = values,
         });
-        ret.* = Env{ .map = map, .caller = null, .global = map };
-        return ret;
+        return try C.new(Self, Env{ .map = map, .caller = null, .global = map });
     }
 
     pub fn globalDef(self: *const Self, k: SymbolID, v: ValueRef) !void {
-        if (!try self.global.put(k, v)) {
-            std.log.err("redefine of {s}", .{S.getName(k).?});
-            unreachable;
-        }
+        _ = try self.global.put(k, v);
     }
 
-    pub fn fork(self: *const Self, names: ValueRef, values: ValueRef, len: usize) !Env.Ref {
-        std.debug.assert(C.listLength(names) == len);
-        std.debug.assert(C.listLength(values) == len);
-
+    pub fn fork(self: *const Self, names: ValueRef, values: ValueRef) !Env.Ref {
+        std.debug.assert(C.listLength(names) == C.listLength(values));
         const map = try C.new(Map, Map{
             .names = names,
             .values = values,
