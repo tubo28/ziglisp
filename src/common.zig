@@ -4,7 +4,7 @@ const S = @import("symbol.zig");
 
 const SymbolID = S.ID;
 const Env = @import("env.zig").Env;
-const EnvRef = Env.Ref;
+const EnvRef = ValueRef;
 
 pub const ValueRef = *const Value;
 pub const EvalResult = struct { ValueRef, EnvRef };
@@ -18,7 +18,11 @@ pub const Cons = struct {
 };
 
 pub fn new(ty: anytype, x: ty) !*ty {
-    std.log.debug("alloc.create {} bytes for {}", .{ @sizeOf(ty), ty });
+    if (ty == Value) {
+        std.log.debug("alloc.create {} bytes for {}.{s}", .{ @sizeOf(ty), ty, @tagName(x) });
+    } else {
+        std.log.debug("alloc.create {} bytes for {}", .{ @sizeOf(ty), ty });
+    }
     var ret: *ty = try alloc.create(ty);
     ret.* = x;
     return ret;

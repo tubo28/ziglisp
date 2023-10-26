@@ -1,8 +1,9 @@
 const std = @import("std");
 
 const C = @import("common.zig");
-const E = @import("evaluate.zig");
+const E = @import("eval.zig");
 const S = @import("symbol.zig");
+const M = @import("map.zig");
 
 const _car = C._car;
 const _cdr = C._cdr;
@@ -18,8 +19,8 @@ const t = C.t;
 const Value = C.Value;
 const ValueRef = C.ValueRef;
 
-const Env = @import("env.zig").Env;
-const EnvRef = Env.Ref;
+const En = @import("env.zig");
+const EnvRef = ValueRef;
 
 pub const Function = fn (ValueRef) anyerror!ValueRef;
 pub const SpecialForm = fn (ValueRef, EnvRef) anyerror!EvalResult;
@@ -95,7 +96,7 @@ pub fn loadBuiltin() !EnvRef {
         values = try newCons(try new(Value, Value{ .b_form = idx }), values);
     }
 
-    return try Env.new(names, values);
+    return try M.addAll(C.empty(), names, values);
 }
 
 // lambda and define
@@ -117,9 +118,9 @@ const SpecialForms = struct {
     // defineV is the only way to modify the global env.
     fn defineV(list: ValueRef, env: EnvRef) anyerror!EvalResult {
         std.debug.assert(C.listLength(list) == 2);
-        const name = _car(list).symbol;
+        const name = _car(list);
         var bind_to: *Value = try C.new(Value, undefined);
-        try env.globalDef(name, bind_to);
+        try En.addGlobal(name, bind_to);
         const expr = _cadr(list);
         const val, _ = try E.evaluate(expr, env); // Assume that RHS has no side-effect.
         bind_to.* = val.*;

@@ -2,15 +2,15 @@ const std = @import("std");
 
 const B = @import("builtin.zig");
 const C = @import("common.zig");
-const E = @import("evaluate.zig");
+const E = @import("eval.zig");
 const P = @import("parse.zig");
 const Pre = @import("preproc.zig");
 const S = @import("symbol.zig");
-const T = @import("tokenize.zig");
+const T = @import("tok.zig");
 
-const Env = @import("env.zig").Env;
+const En = @import("env.zig");
+const EnvRef = ValueRef;
 const alloc = C.alloc;
-const EnvRef = Env.Ref;
 const toString = C.toString;
 const ValueRef = C.ValueRef;
 
@@ -27,6 +27,8 @@ pub fn main() !void {
 pub fn init() !EnvRef {
     try S.init();
     try C.init();
+    En.init();
+
     const env = try B.loadBuiltin();
     _, const ret = try eval(@embedFile("builtin.scm"), env);
     return ret;

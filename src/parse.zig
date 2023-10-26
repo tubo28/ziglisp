@@ -1,11 +1,11 @@
 const std = @import("std");
 const assert = std.debug.assert;
 
-const T = @import("tokenize.zig").Token;
+const T = @import("tok.zig").Token;
 const S = @import("symbol.zig");
 const C = @import("common.zig");
 
-const TokenKind = @import("tokenize.zig").TokenKind;
+const TokenKind = @import("tok.zig").TokenKind;
 const Value = C.Value;
 const ValueRef = C.ValueRef;
 
