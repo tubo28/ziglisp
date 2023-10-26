@@ -13,6 +13,7 @@ const alloc = C.alloc;
 const EvalResult = C.EvalResult;
 const f = C.f;
 const new = C.new;
+const newCons = C.newCons;
 const t = C.t;
 const Value = C.Value;
 const ValueRef = C.ValueRef;
@@ -80,24 +81,21 @@ pub fn loadBuiltin() !EnvRef {
     std.debug.assert(form_names.len == form.len);
 
     // Bind symbol and symbol id
-    var names = try C.alloc.alloc(S.ID, 100);
-    var values = try C.alloc.alloc(ValueRef, 100);
+    var names = C.empty();
+    var values = C.empty();
 
-    var i: usize = 0;
     for (func_names, 100_000_000.., 0..) |name, sym_id, idx| {
         try S.registerUnsafe(name, @intCast(sym_id));
-        names[i] = @intCast(sym_id);
-        values[i] = try new(Value, Value{ .b_func = idx });
-        i += 1;
+        names = try newCons(try new(Value, Value{ .symbol = @intCast(sym_id) }), names);
+        values = try newCons(try new(Value, Value{ .b_func = idx }), values);
     }
     for (form_names, 200_000_000.., 0..) |name, sym_id, idx| {
         try S.registerUnsafe(name, @intCast(sym_id));
-        names[i] = @intCast(sym_id);
-        values[i] = try new(Value, Value{ .b_form = idx });
-        i += 1;
+        names = try newCons(try new(Value, Value{ .symbol = @intCast(sym_id) }), names);
+        values = try newCons(try new(Value, Value{ .b_form = idx }), values);
     }
 
-    return try Env.new(names, values, i);
+    return try Env.new(names, values);
 }
 
 // lambda and define
@@ -121,7 +119,7 @@ const SpecialForms = struct {
         std.debug.assert(C.listLength(list) == 2);
         const name = _car(list).symbol;
         var bind_to: *Value = try C.new(Value, undefined);
-        env.globalDef(name, bind_to);
+        try env.globalDef(name, bind_to);
         const expr = _cadr(list);
         const val, _ = try E.evaluate(expr, env); // Assume that RHS has no side-effect.
         bind_to.* = val.*;

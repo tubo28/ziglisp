@@ -18,7 +18,7 @@ pub const Cons = struct {
 };
 
 pub fn new(ty: anytype, x: ty) !*ty {
-    std.log.debug("{}\t{}", .{ @sizeOf(ty), ty });
+    std.log.debug("alloc.create {} bytes for {}", .{ @sizeOf(ty), ty });
     var ret: *ty = try alloc.create(ty);
     ret.* = x;
     return ret;
@@ -108,19 +108,6 @@ pub fn flattenToALU(cons_list: ValueRef, buf: []ValueRef) std.ArrayListUnmanaged
         h = _cdr(h);
     }
     return list;
-}
-
-/// Convert sequence of cons cell like (foo bar buz) to ArrayListUnmanaged(ValueRef).
-pub fn flatten(cons_list: ValueRef, buf: []ValueRef) usize {
-    var h = cons_list;
-    var i: usize = 0;
-    while (h != empty()) {
-        std.debug.assert(h.* == .cons); // is cons?
-        buf[i] = _car(h);
-        i += 1;
-        h = _cdr(h);
-    }
-    return i;
 }
 
 pub fn listLength(cons_list: ValueRef) usize {
