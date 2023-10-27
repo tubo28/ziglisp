@@ -2,8 +2,8 @@ const std = @import("std");
 
 const C = @import("common.zig");
 
-var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-const alloc = gpa.allocator();
+var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+const alloc = arena.allocator();
 
 const Value = C.Value;
 const ValueRef = C.ValueRef;
