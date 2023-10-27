@@ -4,7 +4,6 @@ const S = @import("symbol.zig");
 const M = @import("mem.zig");
 
 const SymbolID = S.ID;
-const Env = @import("env.zig").Env;
 const EnvRef = ValueRef;
 
 pub const ValueRef = *const Value;
@@ -30,12 +29,6 @@ pub const Value = union(ValueTag) {
     b_form: usize,
 };
 
-// Lambda param
-pub const LocalVal = struct {
-    name: SymbolID,
-    nth: usize,
-};
-
 pub fn newCons(car: ValueRef, cdr: ValueRef) !ValueRef {
     return M.new(
         Value,
@@ -45,10 +38,8 @@ pub fn newCons(car: ValueRef, cdr: ValueRef) !ValueRef {
 
 pub const Lambda = struct {
     params: ValueRef, // symbols
-    // arity: usize,
     body: ValueRef,
-    closure: EnvRef, // captured env (lexical scope)
-    // TODO: Add table for function argument to make beta reduction faster
+    closure: EnvRef, // captured env
 };
 
 /// empty is a ConsCell such that both its car and cdr are itself.

@@ -25,17 +25,8 @@ pub fn evaluate(x: ValueRef, env: EnvRef) anyerror!EvalResult {
         Value.cons => |cons| {
             // Call something
             const c = try toCallable(cons.car, env);
-            // std.log.debug("call {s}", .{try C.toString(cons.car)});
-            // std.log.debug("  with args {s}", .{try C.toString(cons.cdr)});
             return call(c, cons.cdr, env);
         },
-    }
-}
-
-fn symbolp(x: ValueRef) ?SymbolID {
-    switch (x.*) {
-        Value.symbol => |s| return s,
-        else => return null,
     }
 }
 
@@ -79,15 +70,9 @@ fn toCallable(car: *const C.Value, env: EnvRef) !Callable {
 
 fn call(callable: Callable, args: ValueRef, env: EnvRef) anyerror!EvalResult {
     switch (callable) {
-        Callable.b_form => |form| {
-            return form(args, env);
-        },
-        Callable.b_func => |func| {
-            return .{ try func(try evalAll(args, env)), env };
-        },
-        Callable.lambda => |lambda| {
-            return .{ try callLambda(lambda, try evalAll(args, env)), env };
-        },
+        Callable.b_form => |form| return form(args, env),
+        Callable.b_func => |func| return .{ try func(try evalAll(args, env)), env },
+        Callable.lambda => |lambda| return .{ try callLambda(lambda, try evalAll(args, env)), env },
     }
 }
 
