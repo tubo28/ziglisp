@@ -4,20 +4,21 @@ const C = @import("common.zig");
 const E = @import("eval.zig");
 const S = @import("symbol.zig");
 const M = @import("map.zig");
+const Mem = @import("mem.zig");
 
 const _car = C._car;
 const _cdr = C._cdr;
 const _cadr = C._cadr;
 const _cddr = C._cddr;
 const _caddr = C._caddr;
-const alloc = C.alloc;
 const EvalResult = C.EvalResult;
 const f = C.f;
-const new = C.new;
 const newCons = C.newCons;
 const t = C.t;
 const Value = C.Value;
 const ValueRef = C.ValueRef;
+
+const new = Mem.new;
 
 const En = @import("env.zig");
 const EnvRef = ValueRef;
@@ -119,7 +120,7 @@ const SpecialForms = struct {
     fn defineV(list: ValueRef, env: EnvRef) anyerror!EvalResult {
         std.debug.assert(C.listLength(list) == 2);
         const name = _car(list);
-        var bind_to: *Value = try C.new(Value, undefined);
+        var bind_to: *Value = try new(Value, undefined);
         try En.addGlobal(name, bind_to);
         const expr = _cadr(list);
         const val, _ = try E.evaluate(expr, env); // Assume that RHS has no side-effect.
@@ -163,7 +164,7 @@ const SpecialForms = struct {
         const params = _car(list);
         const body = _cadr(list);
 
-        const func_val = try C.new(Value, Value{
+        const func_val = try new(Value, Value{
             .lambda = try new(C.Lambda, C.Lambda{
                 .params = params,
                 .body = body,
@@ -199,7 +200,7 @@ const Functions = struct {
         const slice = C.flattenToALU(xs, &buf);
         var ret: i64 = 0;
         for (slice.items) |x| ret += x.number;
-        return C.new(Value, Value{ .number = ret });
+        return new(Value, Value{ .number = ret });
     }
 
     fn sub(xs: ValueRef) anyerror!ValueRef {
@@ -207,7 +208,7 @@ const Functions = struct {
         const slice = C.flattenToALU(xs, &buf);
         var ret: i64 = 0;
         for (slice.items, 0..) |x, i| ret += if (i == 0) x.number else -x.number;
-        return C.new(Value, Value{ .number = ret });
+        return new(Value, Value{ .number = ret });
     }
 
     fn mul(xs: ValueRef) anyerror!ValueRef {
@@ -215,17 +216,17 @@ const Functions = struct {
         const slice = C.flattenToALU(xs, &buf);
         var ret: i64 = 1;
         for (slice.items) |x| ret *= x.number;
-        return C.new(Value, Value{ .number = ret });
+        return new(Value, Value{ .number = ret });
     }
 
     fn quotient(xs: ValueRef) anyerror!ValueRef {
         const ret = @divFloor(_car(xs).number, _cadr(xs).number);
-        return C.new(Value, Value{ .number = ret });
+        return new(Value, Value{ .number = ret });
     }
 
     fn modulo(xs: ValueRef) anyerror!ValueRef {
         const ret = @mod(_car(xs).number, _cadr(xs).number);
-        return C.new(Value, Value{ .number = ret });
+        return new(Value, Value{ .number = ret });
     }
 
     fn or_(xs: ValueRef) anyerror!ValueRef {

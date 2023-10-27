@@ -3,6 +3,7 @@ const std = @import("std");
 const T = @import("tok.zig").Token;
 const S = @import("symbol.zig");
 const C = @import("common.zig");
+const Mem = @import("mem.zig");
 
 const TokenKind = T.TokenKind;
 const Value = C.Value;
@@ -16,9 +17,9 @@ var lambda: ValueRef = undefined;
 var let: ValueRef = undefined;
 
 pub fn preprocessAll(trees: []ValueRef, result: []ValueRef) !void {
-    define = try C.new(Value, Value{ .symbol = try S.getOrRegister("define") });
-    lambda = try C.new(Value, Value{ .symbol = try S.getOrRegister("lambda") });
-    let = try C.new(Value, Value{ .symbol = try S.getOrRegister("let") });
+    define = try Mem.new(Value, Value{ .symbol = try S.getOrRegister("define") });
+    lambda = try Mem.new(Value, Value{ .symbol = try S.getOrRegister("lambda") });
+    let = try Mem.new(Value, Value{ .symbol = try S.getOrRegister("let") });
     for (trees, 0..) |t, i| result[i] = try applyAllSteps(t);
 }
 

@@ -4,6 +4,7 @@ const assert = std.debug.assert;
 const T = @import("tok.zig").Token;
 const S = @import("symbol.zig");
 const C = @import("common.zig");
+const Mem = @import("mem.zig");
 
 const TokenKind = @import("tok.zig").TokenKind;
 const Value = C.Value;
@@ -41,16 +42,16 @@ fn parseSExpr(tokens: []const T) anyerror!struct { ValueRef, []const T } {
         TokenKind.quote => {
             // <quote> <sexpr> => (quote <sexpr>)
             const value, const rest = try parseSExpr(tail);
-            const q = try C.new(Value, Value{ .symbol = try S.getOrRegister("quote") });
+            const q = try Mem.new(Value, Value{ .symbol = try S.getOrRegister("quote") });
             const quote = try C.newCons(q, try C.newCons(value, C.empty()));
             return .{ quote, rest };
         },
         TokenKind.int => |int| {
-            const atom = try C.new(Value, Value{ .number = int });
+            const atom = try Mem.new(Value, Value{ .number = int });
             return .{ atom, tokens[1..] };
         },
         TokenKind.symbol => |symbol| {
-            const atom = try C.new(Value, Value{ .symbol = symbol });
+            const atom = try Mem.new(Value, Value{ .symbol = symbol });
             return .{ atom, tokens[1..] };
         },
         TokenKind.right, TokenKind.dot => unreachable,

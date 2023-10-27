@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const S = @import("symbol.zig");
+const M = @import("mem.zig");
 
 const SymbolID = S.ID;
 const Env = @import("env.zig").Env;
@@ -16,17 +17,6 @@ pub const Cons = struct {
     car: ValueRef,
     cdr: ValueRef,
 };
-
-pub fn new(ty: anytype, x: ty) !*ty {
-    if (ty == Value) {
-        std.log.debug("alloc.create {} bytes for {}.{s}", .{ @sizeOf(ty), ty, @tagName(x) });
-    } else {
-        std.log.debug("alloc.create {} bytes for {}", .{ @sizeOf(ty), ty });
-    }
-    var ret: *ty = try alloc.create(ty);
-    ret.* = x;
-    return ret;
-}
 
 pub const ValueTag = enum { number, symbol, cons, lambda, b_func, b_form };
 /// Node of tree.
@@ -47,7 +37,7 @@ pub const LocalVal = struct {
 };
 
 pub fn newCons(car: ValueRef, cdr: ValueRef) !ValueRef {
-    return new(
+    return M.new(
         Value,
         Value{ .cons = Cons{ .car = car, .cdr = cdr } },
     );
@@ -67,7 +57,7 @@ pub fn empty() ValueRef {
 }
 
 pub fn init() !void {
-    var e = try new(Value, Value{ .cons = undefined });
+    var e = try M.new(Value, Value{ .cons = undefined });
     e.cons = Cons{ .car = e, .cdr = e };
     empty_opt = e;
 
@@ -76,7 +66,7 @@ pub fn init() !void {
 }
 
 fn initSpecialSymbol(sym: []const u8, dst: *?*Value) !void {
-    var ptr = try new(Value, Value{ .symbol = try S.getOrRegister(sym) });
+    var ptr = try M.new(Value, Value{ .symbol = try S.getOrRegister(sym) });
     dst.* = ptr;
 }
 
