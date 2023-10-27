@@ -18,28 +18,3 @@ pub fn new(ty: anytype, x: ty) !*ty {
     ret.* = x;
     return ret;
 }
-
-const Set = std.AutoHashMap(ValueRef, void);
-
-fn mark(root: ValueRef, marked: *Set) void {
-    if (marked.get(root)) return;
-
-    switch (root.*) {
-        Value.cons => |cons| {
-            mark(cons.car, marked);
-            mark(cons.cdr, marked);
-        },
-        Value.lambda => |lambda| {
-            mark(lambda.params, marked);
-            mark(lambda.body, marked);
-            mark(lambda.closure, marked);
-        },
-        Value.number, Value.symbol, Value.b_func, Value.b_form => {
-            marked.put(root, opaque {});
-        },
-    }
-}
-
-fn sweep(root: ValueRef) void {
-    _ = root;
-}
