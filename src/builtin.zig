@@ -11,7 +11,6 @@ const _cdr = C._cdr;
 const _cadr = C._cadr;
 const _cddr = C._cddr;
 const _caddr = C._caddr;
-const EvalResult = C.EvalResult;
 const f = C.f;
 const newCons = C.newCons;
 const t = C.t;
@@ -24,7 +23,7 @@ const En = @import("env.zig");
 const EnvRef = ValueRef;
 
 pub const Function = fn (ValueRef) anyerror!ValueRef;
-pub const SpecialForm = fn (ValueRef, EnvRef) anyerror!EvalResult;
+pub const SpecialForm = fn (ValueRef, EnvRef) anyerror!ValueRef;
 
 const func_names = [_][]const u8{
     "car",
@@ -64,7 +63,6 @@ pub const func = [_]*const Function{
 const form_names = [_][]const u8{
     "quote",
     "begin",
-    "define",
     "lambda",
     "if",
     "cond",
@@ -72,7 +70,6 @@ const form_names = [_][]const u8{
 pub const form = [_]*const SpecialForm{
     SpecialForms.quote,
     SpecialForms.begin,
-    SpecialForms.define,
     SpecialForms.lambda,
     SpecialForms.if_,
     SpecialForms.cond,
@@ -102,64 +99,43 @@ pub fn loadBuiltin() !EnvRef {
 
 // lambda and define
 const SpecialForms = struct {
-    fn quote(list: ValueRef, env: EnvRef) anyerror!EvalResult {
-        return .{ _car(list), env };
+    fn quote(list: ValueRef, env: EnvRef) anyerror!ValueRef {
+        _ = env;
+        return _car(list);
     }
 
-    // Define function or value
-    fn define(list: ValueRef, env: EnvRef) anyerror!EvalResult {
-        std.debug.assert(C.listLength(list) > 0);
-        switch (_car(list).*) {
-            Value.symbol => return defineV(list, env),
-            else => unreachable,
-        }
-    }
-
-    // (define name body)
-    // defineV is the only way to modify the global env.
-    fn defineV(list: ValueRef, env: EnvRef) anyerror!EvalResult {
-        std.debug.assert(C.listLength(list) == 2);
-        const name = _car(list);
-        var bind_to: *Value = try new(Value, undefined);
-        try En.addGlobal(name, bind_to);
-        const expr = _cadr(list);
-        const val, _ = try E.evaluate(expr, env); // Assume that RHS has no side-effect.
-        bind_to.* = val.*;
-        return .{ val, env };
-    }
-
-    fn if_(list: ValueRef, env: EnvRef) anyerror!EvalResult {
+    fn if_(list: ValueRef, env: EnvRef) anyerror!ValueRef {
         const pred = _car(list);
         const then = _cadr(list);
-        const p, _ = try E.evaluate(pred, env);
-        if (toBool(p)) return try E.evaluate(then, env);
+        const p = try E.eval(pred, env);
+        if (toBool(p)) return try E.eval(then, env);
         const unless = if (C.listLength(list) >= 3) _caddr(list) else null;
-        if (unless) |u| return try E.evaluate(u, env);
-        return .{ C.empty(), env }; // Return empty if pred is false and unless is not given.
+        if (unless) |u| return try E.eval(u, env);
+        return C.empty(); // Return empty if pred is false and unless is not given.
     }
 
-    fn cond(clauses: ValueRef, env: EnvRef) anyerror!EvalResult {
+    fn cond(clauses: ValueRef, env: EnvRef) anyerror!ValueRef {
         var buf: [100]ValueRef = undefined;
         const slice = C.flattenToALU(clauses, &buf);
         for (slice.items) |cl| {
             const pred = _car(cl);
-            const p, _ = try E.evaluate(pred, env);
-            if (toBool(p)) return E.evaluate(_cadr(cl), env);
+            const p = try E.eval(pred, env);
+            if (toBool(p)) return E.eval(_cadr(cl), env);
         }
-        return .{ C.empty(), env }; // Return empty if all pred is false.
+        return C.empty(); // Return empty if all pred is false.
     }
 
-    fn begin(exprs: ValueRef, env: EnvRef) anyerror!EvalResult {
+    fn begin(exprs: ValueRef, env: EnvRef) anyerror!ValueRef {
         var ret = C.empty();
         var buf: [100]ValueRef = undefined;
         const slice = C.flattenToALU(exprs, &buf);
-        for (slice.items) |expr| ret, _ = try E.evaluate(expr, env);
-        return .{ ret, env }; // return the last result
+        for (slice.items) |expr| ret = try E.eval(expr, env);
+        return ret; // return the last result
     }
 
     // (lambda (x y) (+ x y))
     // Lambda captures outer env (lexical scope).
-    fn lambda(list: ValueRef, env: EnvRef) anyerror!EvalResult {
+    fn lambda(list: ValueRef, env: EnvRef) anyerror!ValueRef {
         std.debug.assert(C.listLength(list) >= 2);
         const params = _car(list);
         const body = _cadr(list);
@@ -171,7 +147,7 @@ const SpecialForms = struct {
                 .closure = env, // capture env
             }),
         });
-        return .{ func_val, env };
+        return func_val;
     }
 };
 

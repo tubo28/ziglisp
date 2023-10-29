@@ -14,18 +14,26 @@ const ValueRef = C.ValueRef;
 
 const Token = @import("tok.zig").Token;
 const Builtin = @import("builtin.zig");
+const new = @import("mem.zig").new;
 
 pub fn evaluate(x: ValueRef, env: EnvRef) anyerror!EvalResult {
     // std.log.debug("evaluate: {s}", .{try C.toString(x)});
+    return if (x.* == .cons and C._car(x).* == .symbol and C._car(x).symbol == try S.getOrRegister("define"))
+        define(C._cdr(x), env)
+    else
+        .{ try eval(x, env), env };
+}
+
+pub fn eval(x: ValueRef, env: EnvRef) anyerror!ValueRef {
     switch (x.*) {
-        Value.number => return .{ x, env },
+        Value.number => return x,
         Value.lambda, Value.b_func, Value.b_form => unreachable,
-        Value.symbol => return if (En.resolve(env, x)) |ent| .{ ent, env } else .{ x, env },
+        Value.symbol => return if (En.resolve(env, x)) |ent| ent else x,
         Value.cons => |cons| return call(cons.car, cons.cdr, env),
     }
 }
 
-fn call(car: *const C.Value, args: ValueRef, env: EnvRef) anyerror!EvalResult {
+fn call(car: *const C.Value, args: ValueRef, env: EnvRef) anyerror!ValueRef {
     if (car.* != .cons and car.* != .symbol) {
         std.log.err("not callable: {}", .{car.*});
         unreachable;
@@ -33,8 +41,8 @@ fn call(car: *const C.Value, args: ValueRef, env: EnvRef) anyerror!EvalResult {
 
     if (car.* == .cons) {
         // example: ((lambda (x) (+ x x)) 1)
-        const lmd, _ = try evaluate(car, env);
-        return callLambda(lmd.lambda, args, env);
+        const lambda = try eval(car, env);
+        return callLambda(lambda.lambda, args, env);
     }
 
     // car.* == .symbol
@@ -56,24 +64,46 @@ fn call(car: *const C.Value, args: ValueRef, env: EnvRef) anyerror!EvalResult {
     }
 }
 
-fn callForm(form: *const Builtin.SpecialForm, args: ValueRef, env: EnvRef) anyerror!EvalResult {
+fn callForm(form: *const Builtin.SpecialForm, args: ValueRef, env: EnvRef) anyerror!ValueRef {
     return form(args, env);
 }
 
-fn callFunc(func: *const Builtin.Function, args: ValueRef, env: EnvRef) anyerror!EvalResult {
-    return .{ try func(try evalAll(args, env)), env };
+fn callFunc(func: *const Builtin.Function, args: ValueRef, env: EnvRef) anyerror!ValueRef {
+    return try func(try evalAll(args, env));
 }
 
-fn callLambda(lambda: *const Lambda, args: ValueRef, env: EnvRef) anyerror!EvalResult {
+fn callLambda(lambda: *const Lambda, args: ValueRef, env: EnvRef) anyerror!ValueRef {
     var lambda_env = try M.addAll(lambda.closure, lambda.params, try evalAll(args, env));
-    const ret, _ = try evaluate(lambda.body, lambda_env);
-    return .{ ret, env };
+    const ret = try eval(lambda.body, lambda_env);
+    return ret;
 }
 
 fn evalAll(xs: ValueRef, env: EnvRef) anyerror!ValueRef {
     std.debug.assert(xs.* == .cons);
     if (xs == C.empty()) return xs;
-    const car, _ = try evaluate(xs.cons.car, env);
+    const car = try eval(xs.cons.car, env);
     const cdr = try evalAll(xs.cons.cdr, env);
     return try C.newCons(car, cdr);
+}
+
+// Define function or value
+pub fn define(list: ValueRef, env: EnvRef) anyerror!EvalResult {
+    std.debug.assert(C.listLength(list) > 0);
+    switch (C._car(list).*) {
+        Value.symbol => return defineValue(list, env),
+        else => unreachable,
+    }
+}
+
+// (define name body)
+// defineValue is the only way to modify the global env.
+fn defineValue(list: ValueRef, env: EnvRef) anyerror!EvalResult {
+    std.debug.assert(C.listLength(list) == 2);
+    const name = C._car(list);
+    var bind_to: *Value = try new(Value, undefined);
+    try En.addGlobal(name, bind_to);
+    const expr = C._cadr(list);
+    const val = try eval(expr, env); // Assume that RHS has no side-effect.
+    bind_to.* = val.*;
+    return .{ val, env };
 }
