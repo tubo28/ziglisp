@@ -6,7 +6,6 @@ const M = @import("map.zig");
 
 const En = @import("env.zig");
 const EnvRef = ValueRef;
-const EvalResult = C.EvalResult;
 const Lambda = C.Lambda;
 const SymbolID = S.ID;
 const Value = C.Value;
@@ -15,6 +14,8 @@ const ValueRef = C.ValueRef;
 const Token = @import("tok.zig").Token;
 const Builtin = @import("builtin.zig");
 const new = @import("mem.zig").new;
+
+pub const EvalResult = struct { ValueRef, EnvRef };
 
 pub fn evaluate(x: ValueRef, env: EnvRef) anyerror!EvalResult {
     // std.log.debug("evaluate: {s}", .{try C.toString(x)});
@@ -73,9 +74,27 @@ fn callFunc(func: *const Builtin.Function, args: ValueRef, env: EnvRef) anyerror
 }
 
 fn callLambda(lambda: *const Lambda, args: ValueRef, env: EnvRef) anyerror!ValueRef {
-    var lambda_env = try M.addAll(lambda.closure, lambda.params, try evalAll(args, env));
+    const lambda_env = switch (lambda.params.*) {
+        // (lambda x (length x))
+        Value.symbol => try M.addOne(lambda.closure, lambda.params, args),
+        // (lambda (x . xs) (sum xs))
+        else => try appendZipped(lambda.closure, lambda.params, args, env),
+    };
     const ret = try eval(lambda.body, lambda_env);
     return ret;
+}
+
+fn appendZipped(append_to: ValueRef, names: ValueRef, values: ValueRef, env: EnvRef) !ValueRef {
+    if (names == C.empty()) return append_to;
+
+    switch (names.*) {
+        Value.cons => |cons| {
+            const to = try appendZipped(append_to, cons.cdr, values.cons.cdr, env);
+            return try M.addOne(to, cons.car, try eval(values.cons.car, env));
+        },
+        Value.symbol => return try M.addOne(append_to, names, values),
+        else => unreachable,
+    }
 }
 
 fn evalAll(xs: ValueRef, env: EnvRef) anyerror!ValueRef {

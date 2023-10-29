@@ -8,16 +8,16 @@ const _car = C._car;
 const _cdr = C._cdr;
 const empty = C.empty;
 
-pub fn add(map: ValueRef, k: ValueRef, v: ValueRef) !ValueRef {
-    const cons = try newCons(k, v);
+pub fn addOne(map: ValueRef, symbol: ValueRef, value: ValueRef) !ValueRef {
+    const cons = try newCons(symbol, value);
     return try newCons(cons, map);
 }
 
-pub fn addAll(map: ValueRef, ks: ValueRef, vs: ValueRef) !ValueRef {
-    if (ks == empty() and vs == empty()) return map;
-    const k = _car(ks);
-    const v = _car(vs);
-    return try addAll(try add(map, k, v), _cdr(ks), _cdr(vs));
+pub fn addAll(map: ValueRef, symbols: ValueRef, values: ValueRef) !ValueRef {
+    if (symbols == empty() and values == empty()) return map;
+    const k = _car(symbols);
+    const v = _car(values);
+    return try addAll(try addOne(map, k, v), _cdr(symbols), _cdr(values));
 }
 
 pub fn get(map: ValueRef, k: ValueRef) ?ValueRef {

@@ -7,7 +7,6 @@ const SymbolID = S.ID;
 const EnvRef = ValueRef;
 
 pub const ValueRef = *const Value;
-pub const EvalResult = struct { ValueRef, EnvRef };
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 pub const alloc = gpa.allocator();

@@ -12,6 +12,14 @@ test "batch" {
 
     const cases = [_]TestCase{
         TestCase{
+            .code = "1",
+            .want = "1",
+        },
+        TestCase{
+            .code = "a",
+            .want = "a",
+        },
+        TestCase{
             .code = "(+ 1 2)",
             .want = "3",
         },
@@ -166,6 +174,30 @@ test "batch" {
         TestCase{
             .code = @embedFile("examples/y-comb2.scm"),
             .want = "(1 1 2 3 5 8 13 21 34 55 89 144 233 377 610 987 1597 2584 4181 6765 10946)",
+        },
+        TestCase{
+            .code = "((lambda xs (sum xs)) 1 2 3 4 5)",
+            .want = "15",
+        },
+        TestCase{
+            .code = "((lambda (x . xs) (+ x (sum xs))) 1 2 3 4 5)",
+            .want = "15",
+        },
+        TestCase{
+            .code = "((lambda (x y . xs) (+ x y (sum xs))) 1 2 3 4 5)",
+            .want = "15",
+        },
+        TestCase{
+            .code = "(define (my-list . x) x) (my-list 1 2 3 4 5)",
+            .want = "(1 2 3 4 5)",
+        },
+        TestCase{
+            .code = "(define (my-list x . xs) xs) (my-list 1 2 3 4 5)",
+            .want = "(2 3 4 5)",
+        },
+        TestCase{
+            .code = "(define (my-list x y . xs) xs) (my-list 1 2 3 4 5)",
+            .want = "(3 4 5)",
         },
     };
 

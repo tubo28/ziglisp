@@ -19,7 +19,7 @@ pub fn init() void {
 }
 
 pub fn addGlobal(k: ValueRef, v: ValueRef) !void {
-    global = try M.add(global, k, v);
+    global = try M.addOne(global, k, v);
 }
 
 // var c: usize = 0;

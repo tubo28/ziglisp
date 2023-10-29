@@ -38,3 +38,5 @@
       (if (predicate (car lst))
           (cons (car lst) (filter predicate (cdr lst)))
           (filter predicate (cdr lst)))))
+
+(define (sum lst) (fold + 0 lst))
