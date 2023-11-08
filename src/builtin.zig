@@ -6,11 +6,6 @@ const S = @import("symbol.zig");
 const M = @import("map.zig");
 const Mem = @import("mem.zig");
 
-const _car = C._car;
-const _cdr = C._cdr;
-const _cadr = C._cadr;
-const _cddr = C._cddr;
-const _caddr = C._caddr;
 const f = C.f;
 const newCons = C.newCons;
 const t = C.t;
@@ -101,15 +96,15 @@ pub fn loadBuiltin() !EnvRef {
 const SpecialForms = struct {
     fn quote(list: ValueRef, env: EnvRef) anyerror!ValueRef {
         _ = env;
-        return _car(list);
+        return list.car();
     }
 
     fn if_(list: ValueRef, env: EnvRef) anyerror!ValueRef {
-        const pred = _car(list);
-        const then = _cadr(list);
+        const pred = list.car();
+        const then = list.cadr();
         const p = try E.eval(pred, env);
         if (toBool(p)) return try E.eval(then, env);
-        const unless = if (C.listLength(list) >= 3) _caddr(list) else null;
+        const unless = if (C.listLength(list) >= 3) list.caddr() else null;
         if (unless) |u| return try E.eval(u, env);
         return C.empty(); // Return empty if pred is false and unless is not given.
     }
@@ -118,9 +113,9 @@ const SpecialForms = struct {
         var buf: [100]ValueRef = undefined;
         const slice = C.flattenToALU(clauses, &buf);
         for (slice.items) |cl| {
-            const pred = _car(cl);
+            const pred = cl.car();
             const p = try E.eval(pred, env);
-            if (toBool(p)) return E.eval(_cadr(cl), env);
+            if (toBool(p)) return E.eval(cl.cadr(), env);
         }
         return C.empty(); // Return empty if all pred is false.
     }
@@ -137,8 +132,8 @@ const SpecialForms = struct {
     // Lambda captures outer env (lexical scope).
     fn lambda(list: ValueRef, env: EnvRef) anyerror!ValueRef {
         std.debug.assert(C.listLength(list) >= 2);
-        const params = _car(list);
-        const body = _cadr(list);
+        const params = list.car();
+        const body = list.cadr();
 
         const l = try C.newCons(params, try C.newCons(env, try C.newCons(body, C.empty())));
         const func_val = try newValue(Value{ .lambda = l });
@@ -149,17 +144,17 @@ const SpecialForms = struct {
 const Functions = struct {
     fn car(xs: ValueRef) anyerror!ValueRef {
         std.debug.assert(C.listLength(xs) == 1);
-        return _car(_car(xs));
+        return xs.car().car();
     }
 
     fn cdr(xs: ValueRef) anyerror!ValueRef {
         std.debug.assert(C.listLength(xs) == 1);
-        return _cdr(_car(xs));
+        return xs.car().cdr();
     }
 
     fn cons_(xs: ValueRef) anyerror!ValueRef {
         std.debug.assert(C.listLength(xs) == 2);
-        return C.newCons(_car(xs), _cadr(xs));
+        return C.newCons(xs.car(), xs.cadr());
     }
 
     fn list(xs: ValueRef) anyerror!ValueRef {
@@ -170,7 +165,7 @@ const Functions = struct {
         var buf: [100]ValueRef = undefined;
         const slice = C.flattenToALU(xs, &buf);
         var ret: i64 = 0;
-        for (slice.items) |x| ret += x.number;
+        for (slice.items) |x| ret += x.number();
         return newValue(Value{ .number = ret });
     }
 
@@ -178,7 +173,7 @@ const Functions = struct {
         var buf: [100]ValueRef = undefined;
         const slice = C.flattenToALU(xs, &buf);
         var ret: i64 = 0;
-        for (slice.items, 0..) |x, i| ret += if (i == 0) x.number else -x.number;
+        for (slice.items, 0..) |x, i| ret += if (i == 0) x.number() else -x.number();
         return newValue(Value{ .number = ret });
     }
 
@@ -186,17 +181,17 @@ const Functions = struct {
         var buf: [100]ValueRef = undefined;
         const slice = C.flattenToALU(xs, &buf);
         var ret: i64 = 1;
-        for (slice.items) |x| ret *= x.number;
+        for (slice.items) |x| ret *= x.number();
         return newValue(Value{ .number = ret });
     }
 
     fn quotient(xs: ValueRef) anyerror!ValueRef {
-        const ret = @divFloor(_car(xs).number, _cadr(xs).number);
+        const ret = @divFloor(xs.car().number(), xs.cadr().number());
         return newValue(Value{ .number = ret });
     }
 
     fn modulo(xs: ValueRef) anyerror!ValueRef {
-        const ret = @mod(_car(xs).number, _cadr(xs).number);
+        const ret = @mod(xs.car().number(), xs.cadr().number());
         return newValue(Value{ .number = ret });
     }
 
@@ -215,25 +210,25 @@ const Functions = struct {
     }
 
     fn eq(xs: ValueRef) anyerror!ValueRef {
-        if (C.deepEql(_car(xs), _cadr(xs))) return t();
+        if (C.deepEql(xs.car(), xs.cadr())) return t();
         return f();
     }
 
     fn le(xs: ValueRef) anyerror!ValueRef {
-        return toValue(_car(xs).number < _cadr(xs).number);
+        return toValue(xs.car().number() < xs.cadr().number());
     }
 
     fn null_(xs: ValueRef) anyerror!ValueRef {
-        return toValue(_car(xs) == C.empty());
+        return toValue(xs.car().isEmpty());
     }
 
     fn print(xs: ValueRef) !ValueRef {
-        if (xs == C.empty()) return C.empty();
-        const str = try C.toString(_car(xs));
+        if (xs.isEmpty()) return C.empty();
+        const str = try C.toString(xs.car());
         const stdout = std.io.getStdOut().writer();
         nosuspend try stdout.print("#print: {s}\n", .{str});
-        if (_cdr(xs) == C.empty()) return _car(xs);
-        return print(_cdr(xs));
+        if (xs.cdr().isEmpty()) return xs.car();
+        return print(xs.cdr());
     }
 };
 
@@ -246,5 +241,5 @@ fn toBool(x: ValueRef) bool {
 }
 
 fn isF(x: ValueRef) bool {
-    return x == f();
+    return x.ptr == f().ptr;
 }

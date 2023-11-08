@@ -3,10 +3,10 @@ const std = @import("std");
 const S = @import("symbol.zig");
 const M = @import("mem.zig");
 
+pub const ValueRef = M.ValueRef;
+
 const SymbolID = S.ID;
 const EnvRef = ValueRef;
-
-pub const ValueRef = *const Value;
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 pub const alloc = gpa.allocator();
@@ -38,22 +38,22 @@ pub fn empty() ValueRef {
 }
 
 pub fn init() !void {
-    var e = try M.newValue(Value{ .cons = undefined });
-    e.cons = Cons{ .car = e, .cdr = e };
+    var e = try M.newValue(undefined);
+    e.setValue(Value{ .cons = Cons{ .car = e, .cdr = e } });
     empty_opt = e;
 
     try initSpecialSymbol("#t", &t_opt);
     try initSpecialSymbol("#f", &f_opt);
 }
 
-fn initSpecialSymbol(sym: []const u8, dst: *?*Value) !void {
+fn initSpecialSymbol(sym: []const u8, dst: *?ValueRef) !void {
     var ptr = try M.newValue(Value{ .symbol = try S.getOrRegister(sym) });
     dst.* = ptr;
 }
 
-var f_opt: ?*Value = null;
-var t_opt: ?*Value = null;
-var empty_opt: ?*Value = null;
+var f_opt: ?ValueRef = null;
+var t_opt: ?ValueRef = null;
+var empty_opt: ?ValueRef = null;
 
 // pub fn quote() ValueRef {
 //     return quote_opt.?;
@@ -76,19 +76,19 @@ pub fn flattenToALU(cons_list: ValueRef, buf: []ValueRef) std.ArrayListUnmanaged
     var list = std.ArrayListUnmanaged(ValueRef).fromOwnedSlice(buf);
     list.items.len = 0;
     var h = cons_list;
-    while (h != empty()) {
-        std.debug.assert(h.* == .cons); // is cons?
+    while (!h.isEmpty()) {
+        std.debug.assert(h.isCons()); // is cons?
         std.debug.assert(list.items.len < buf.len);
-        list.appendAssumeCapacity(h.cons.car);
-        h = _cdr(h);
+        list.appendAssumeCapacity(h.car());
+        h = h.cdr();
     }
     return list;
 }
 
 pub fn listLength(cons_list: ValueRef) usize {
-    std.debug.assert(cons_list.* == .cons);
-    if (cons_list == empty()) return 0;
-    return 1 + listLength(_cdr(cons_list));
+    std.debug.assert(cons_list.isCons());
+    if (cons_list.isEmpty()) return 0;
+    return 1 + listLength(cons_list.cdr());
 }
 
 pub fn toConsList(list: []ValueRef) !ValueRef {
@@ -98,14 +98,14 @@ pub fn toConsList(list: []ValueRef) !ValueRef {
 
 /// The "deep equal" function for values.
 pub fn deepEql(x: ValueRef, y: ValueRef) bool {
-    if (x == empty() or y == empty()) return x == y;
-    if (@as(ValueTag, x.*) != @as(ValueTag, y.*)) return false;
-    switch (x.*) {
-        Value.number => |x_| return x_ == y.number,
-        Value.symbol => |x_| return x_ == y.symbol,
-        Value.b_func => |x_| return x_ == y.b_func,
-        Value.b_form => |x_| return x_ == y.b_form,
-        Value.cons => |x_| return deepEql(x_.car, y.cons.car) and deepEql(x_.cdr, y.cons.cdr),
+    if (x.isEmpty() or y.isEmpty()) return x.get() == y.get();
+    if (x.tag() != y.tag()) return false;
+    switch (x.get().*) {
+        Value.number => |x_| return x_ == y.number(),
+        Value.symbol => |x_| return x_ == y.symbol(),
+        Value.b_func => |x_| return x_ == y.bfunc(),
+        Value.b_form => |x_| return x_ == y.bform(),
+        Value.cons => |x_| return deepEql(x_.car, y.car()) and deepEql(x_.cdr, y.cdr()),
         Value.lambda => unreachable,
     }
 }
@@ -118,11 +118,11 @@ pub fn toString(cell: ValueRef) ![]const u8 {
 }
 
 fn toStringInner(cell: ValueRef, builder: *std.ArrayList(u8)) anyerror!void {
-    if (cell == empty()) {
+    if (cell.isEmpty()) {
         try builder.appendSlice("()");
         return;
     }
-    switch (cell.*) {
+    switch (cell.get().*) {
         Value.cons => |c| {
             try builder.append('(');
             try consToString(c, builder);
@@ -145,11 +145,11 @@ fn toStringInner(cell: ValueRef, builder: *std.ArrayList(u8)) anyerror!void {
 }
 
 fn consToString(x: Cons, builder: *std.ArrayList(u8)) !void {
-    switch (x.cdr.*) {
+    switch (x.cdr.get().*) {
         Value.cons => |next| {
             // List
             try toStringInner(x.car, builder);
-            if (x.cdr == empty()) return;
+            if (x.cdr.isEmpty()) return;
             try builder.append(' ');
             try consToString(next, builder);
         },
@@ -173,22 +173,23 @@ fn consToString(x: Cons, builder: *std.ArrayList(u8)) !void {
 //     unreachable;
 // }
 
-pub fn _car(x: ValueRef) ValueRef {
-    return x.cons.car;
-}
+// // TODO: remove this
+// pub fn _car(x: ValueRef) ValueRef {
+//     return x.car();
+// }
 
-pub fn _cdr(x: ValueRef) ValueRef {
-    return x.cons.cdr;
-}
+// pub fn _cdr(x: ValueRef) ValueRef {
+//     return x.cdr();
+// }
 
-pub fn _cddr(x: ValueRef) ValueRef {
-    return _cdr(x).cons.cdr;
-}
+// pub fn _cddr(x: ValueRef) ValueRef {
+//     return _cdr(x).cdr();
+// }
 
-pub fn _cadr(x: ValueRef) ValueRef {
-    return _cdr(x).cons.car;
-}
+// pub fn _cadr(x: ValueRef) ValueRef {
+//     return _cdr(x).car();
+// }
 
-pub fn _caddr(x: ValueRef) ValueRef {
-    return _cddr(x).cons.car;
-}
+// pub fn _caddr(x: ValueRef) ValueRef {
+//     return _cddr(x).car();
+// }
