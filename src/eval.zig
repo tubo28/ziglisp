@@ -6,14 +6,13 @@ const M = @import("map.zig");
 
 const En = @import("env.zig");
 const EnvRef = ValueRef;
-const Lambda = C.Lambda;
 const SymbolID = S.ID;
 const Value = C.Value;
 const ValueRef = C.ValueRef;
 
 const Token = @import("tok.zig").Token;
 const Builtin = @import("builtin.zig");
-const new = @import("mem.zig").new;
+const newValue = @import("mem.zig").newValue;
 
 pub const EvalResult = struct { ValueRef, EnvRef };
 
@@ -73,14 +72,17 @@ fn callFunc(func: *const Builtin.Function, args: ValueRef, env: EnvRef) anyerror
     return try func(try evalAll(args, env));
 }
 
-fn callLambda(lambda: *const Lambda, args: ValueRef, env: EnvRef) anyerror!ValueRef {
-    const lambda_env = switch (lambda.params.*) {
+fn callLambda(lambda: ValueRef, args: ValueRef, env: EnvRef) anyerror!ValueRef {
+    const params = C._car(lambda);
+    const closure = C._cadr(lambda);
+    const body = C._caddr(lambda);
+    const lambda_env = switch (params.*) {
         // (lambda x (length x))
-        Value.symbol => try M.addOne(lambda.closure, lambda.params, args),
+        Value.symbol => try M.addOne(closure, params, args),
         // (lambda (x . xs) (sum xs))
-        else => try appendZipped(lambda.closure, lambda.params, args, env),
+        else => try appendZipped(closure, params, args, env),
     };
-    const ret = try eval(lambda.body, lambda_env);
+    const ret = try eval(body, lambda_env);
     return ret;
 }
 
@@ -119,7 +121,7 @@ pub fn define(list: ValueRef, env: EnvRef) anyerror!EvalResult {
 fn defineValue(list: ValueRef, env: EnvRef) anyerror!EvalResult {
     std.debug.assert(C.listLength(list) == 2);
     const name = C._car(list);
-    var bind_to: *Value = try new(Value, undefined);
+    var bind_to: *Value = try newValue(undefined);
     try En.addGlobal(name, bind_to);
     const expr = C._cadr(list);
     const val = try eval(expr, env); // Assume that RHS has no side-effect.

@@ -23,23 +23,14 @@ pub const Value = union(ValueTag) {
     number: i64,
     symbol: SymbolID,
     cons: Cons,
-    lambda: *const Lambda,
+    lambda: ValueRef, // (params closure body)
     b_func: usize, // Index of table
     b_form: usize,
 };
 
 pub fn newCons(car: ValueRef, cdr: ValueRef) !ValueRef {
-    return M.new(
-        Value,
-        Value{ .cons = Cons{ .car = car, .cdr = cdr } },
-    );
+    return M.newValue(Value{ .cons = Cons{ .car = car, .cdr = cdr } });
 }
-
-pub const Lambda = struct {
-    params: ValueRef, // symbols
-    body: ValueRef,
-    closure: EnvRef, // captured env
-};
 
 /// empty is a ConsCell such that both its car and cdr are itself.
 pub fn empty() ValueRef {
@@ -47,7 +38,7 @@ pub fn empty() ValueRef {
 }
 
 pub fn init() !void {
-    var e = try M.new(Value, Value{ .cons = undefined });
+    var e = try M.newValue(Value{ .cons = undefined });
     e.cons = Cons{ .car = e, .cdr = e };
     empty_opt = e;
 
@@ -56,7 +47,7 @@ pub fn init() !void {
 }
 
 fn initSpecialSymbol(sym: []const u8, dst: *?*Value) !void {
-    var ptr = try M.new(Value, Value{ .symbol = try S.getOrRegister(sym) });
+    var ptr = try M.newValue(Value{ .symbol = try S.getOrRegister(sym) });
     dst.* = ptr;
 }
 

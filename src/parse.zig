@@ -42,16 +42,16 @@ fn parseSExpr(tokens: []const T) anyerror!struct { ValueRef, []const T } {
         TokenKind.quote => {
             // <quote> <sexpr> => (quote <sexpr>)
             const value, const rest = try parseSExpr(tail);
-            const q = try Mem.new(Value, Value{ .symbol = try S.getOrRegister("quote") });
+            const q = try Mem.newValue(Value{ .symbol = try S.getOrRegister("quote") });
             const quote = try C.newCons(q, try C.newCons(value, C.empty()));
             return .{ quote, rest };
         },
         TokenKind.int => |int| {
-            const atom = try Mem.new(Value, Value{ .number = int });
+            const atom = try Mem.newValue(Value{ .number = int });
             return .{ atom, tokens[1..] };
         },
         TokenKind.symbol => |symbol| {
-            const atom = try Mem.new(Value, Value{ .symbol = symbol });
+            const atom = try Mem.newValue(Value{ .symbol = symbol });
             return .{ atom, tokens[1..] };
         },
         TokenKind.right, TokenKind.dot => unreachable,

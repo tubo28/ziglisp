@@ -17,7 +17,7 @@ const t = C.t;
 const Value = C.Value;
 const ValueRef = C.ValueRef;
 
-const new = Mem.new;
+const newValue = Mem.newValue;
 
 const En = @import("env.zig");
 const EnvRef = ValueRef;
@@ -85,13 +85,13 @@ pub fn loadBuiltin() !EnvRef {
 
     for (func_names, 100_000_000.., 0..) |name, sym_id, idx| {
         try S.registerUnsafe(name, @intCast(sym_id));
-        names = try newCons(try new(Value, Value{ .symbol = @intCast(sym_id) }), names);
-        values = try newCons(try new(Value, Value{ .b_func = idx }), values);
+        names = try newCons(try newValue(Value{ .symbol = @intCast(sym_id) }), names);
+        values = try newCons(try newValue(Value{ .b_func = idx }), values);
     }
     for (form_names, 200_000_000.., 0..) |name, sym_id, idx| {
         try S.registerUnsafe(name, @intCast(sym_id));
-        names = try newCons(try new(Value, Value{ .symbol = @intCast(sym_id) }), names);
-        values = try newCons(try new(Value, Value{ .b_form = idx }), values);
+        names = try newCons(try newValue(Value{ .symbol = @intCast(sym_id) }), names);
+        values = try newCons(try newValue(Value{ .b_form = idx }), values);
     }
 
     return try M.addAll(C.empty(), names, values);
@@ -140,13 +140,8 @@ const SpecialForms = struct {
         const params = _car(list);
         const body = _cadr(list);
 
-        const func_val = try new(Value, Value{
-            .lambda = try new(C.Lambda, C.Lambda{
-                .params = params,
-                .body = body,
-                .closure = env, // capture env
-            }),
-        });
+        const l = try C.newCons(params, try C.newCons(env, try C.newCons(body, C.empty())));
+        const func_val = try newValue(Value{ .lambda = l });
         return func_val;
     }
 };
@@ -176,7 +171,7 @@ const Functions = struct {
         const slice = C.flattenToALU(xs, &buf);
         var ret: i64 = 0;
         for (slice.items) |x| ret += x.number;
-        return new(Value, Value{ .number = ret });
+        return newValue(Value{ .number = ret });
     }
 
     fn sub(xs: ValueRef) anyerror!ValueRef {
@@ -184,7 +179,7 @@ const Functions = struct {
         const slice = C.flattenToALU(xs, &buf);
         var ret: i64 = 0;
         for (slice.items, 0..) |x, i| ret += if (i == 0) x.number else -x.number;
-        return new(Value, Value{ .number = ret });
+        return newValue(Value{ .number = ret });
     }
 
     fn mul(xs: ValueRef) anyerror!ValueRef {
@@ -192,17 +187,17 @@ const Functions = struct {
         const slice = C.flattenToALU(xs, &buf);
         var ret: i64 = 1;
         for (slice.items) |x| ret *= x.number;
-        return new(Value, Value{ .number = ret });
+        return newValue(Value{ .number = ret });
     }
 
     fn quotient(xs: ValueRef) anyerror!ValueRef {
         const ret = @divFloor(_car(xs).number, _cadr(xs).number);
-        return new(Value, Value{ .number = ret });
+        return newValue(Value{ .number = ret });
     }
 
     fn modulo(xs: ValueRef) anyerror!ValueRef {
         const ret = @mod(_car(xs).number, _cadr(xs).number);
-        return new(Value, Value{ .number = ret });
+        return newValue(Value{ .number = ret });
     }
 
     fn or_(xs: ValueRef) anyerror!ValueRef {

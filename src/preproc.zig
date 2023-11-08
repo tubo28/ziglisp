@@ -17,9 +17,9 @@ var lambda: ValueRef = undefined;
 var let: ValueRef = undefined;
 
 pub fn preprocessAll(trees: []ValueRef, result: []ValueRef) !void {
-    define = try Mem.new(Value, Value{ .symbol = try S.getOrRegister("define") });
-    lambda = try Mem.new(Value, Value{ .symbol = try S.getOrRegister("lambda") });
-    let = try Mem.new(Value, Value{ .symbol = try S.getOrRegister("let") });
+    define = try Mem.newValue(Value{ .symbol = try S.getOrRegister("define") });
+    lambda = try Mem.newValue(Value{ .symbol = try S.getOrRegister("lambda") });
+    let = try Mem.newValue(Value{ .symbol = try S.getOrRegister("let") });
     for (trees, 0..) |t, i| result[i] = try applyAllSteps(t);
 }
 

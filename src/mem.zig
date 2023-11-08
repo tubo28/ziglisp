@@ -8,13 +8,9 @@ const alloc = arena.allocator();
 const Value = C.Value;
 const ValueRef = C.ValueRef;
 
-pub fn new(ty: anytype, x: ty) !*ty {
-    if (ty == Value) {
-        std.log.debug("alloc.create {} bytes for {}.{s}", .{ @sizeOf(ty), ty, @tagName(x) });
-    } else {
-        std.log.debug("alloc.create {} bytes for {}", .{ @sizeOf(ty), ty });
-    }
-    var ret: *ty = try alloc.create(ty);
+pub fn newValue(x: Value) !*Value {
+    std.log.debug("alloc.create {} bytes for {}.{s}", .{ @sizeOf(Value), Value, @tagName(x) });
+    var ret: *Value = try alloc.create(Value);
     ret.* = x;
     return ret;
 }
